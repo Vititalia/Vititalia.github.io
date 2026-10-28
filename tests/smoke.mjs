@@ -105,20 +105,38 @@ ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before si
   }
 }
 
-/* deep link → login → back to the intended route */
+/* protected route while signed out → login → always lands on Home */
 {
+  app.logout();
+  await wait(30);
+  desktop = true;
   window.location.hash = '#/dati/lotti';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
-  await wait(20);
-  ok(text().includes('Accedi a Vignero'), 'protected route redirects to login');
-  desktop = true;
+  await wait(30);
+  ok(text().includes('Accedi a Vignero'), 'a protected route while signed out redirects to the login screen');
+
   const admin = auth.USERS.find((u) => u.role === 'admin');
   document.querySelector('[name="email"]').value = admin.email;
   document.querySelector('[name="password"]').value = admin.password;
   document.querySelector('#loginForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-  await wait(40);
-  ok(window.location.hash === '#/dati/lotti', 'after login the intended route is restored (' + window.location.hash + ')');
-  ok(text().includes('Lotti magazzino'), 'and that page renders');
+  await wait(50);
+  ok(window.location.hash === '#/home',
+     'after signing in you land on Home, not on the requested page (' + window.location.hash + ')');
+  ok(text().includes('da dove vuoi iniziare'), 'the Home launcher is what renders');
+  ok(!!document.querySelector('.launcher'), 'the launcher grid is present');
+  ok(document.getElementById('appTitle').textContent.trim() === 'Panoramica',
+     'the page title is Panoramica (got "' + document.getElementById('appTitle').textContent.trim() + '")');
+  ok(!document.getElementById('newBtn'), 'the lots page (with its "Nuovo lotto" button) is not what opened');
+
+  /* the same holds for a plain sign-in from the login screen */
+  app.logout();
+  await wait(30);
+  ok(window.location.hash === '#/login', 'logout goes back to the login screen');
+  document.querySelector('[name="email"]').value = admin.email;
+  document.querySelector('[name="password"]').value = admin.password;
+  document.querySelector('#loginForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(50);
+  ok(window.location.hash === '#/home', 'a normal sign-in also opens Home (' + window.location.hash + ')');
 }
 
 /* ---------------- route matrix ---------------- */

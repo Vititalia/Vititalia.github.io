@@ -46,7 +46,7 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 
 | Route | Screen | Notes |
 |---|---|---|
-| `#/login` | Accedi | email + password, one account per profile, session of 8 h |
+| `#/login` | Accedi | email + password, one account per profile, session of 8 h; **signing in always opens Home** |
 | `#/home` | Panoramica | launcher: one tile per page the role can open | 4 KPIs, recent lots, top shortages, report shortcuts |
 | `#/r/disponibilita` | Riepilogo disponibilità | grouped by rootstock, **Totale portainnesto** subtotals, negative rows bold red |
 | `#/r/produttore` | Riepilogo per produttore | 16 columns: 8 growers + *Non attribuito* + total, frozen first columns |

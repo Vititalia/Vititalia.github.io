@@ -27,7 +27,6 @@ const ROUTES = [
 
 let session = null;      // { userId, name, email, role, grower, exp, user }
 let role = null;
-let pendingHash = null;  // route requested before being sent to the login screen
 let current = { path: '/home', params: new URLSearchParams() };
 let lastHash = null;     // to tell a real navigation from a re-render
 let layoutMode = null;   // 'mobile' | 'desktop' — only a *mode* change triggers a re-render
@@ -50,18 +49,16 @@ export function login(user) {
   session = A.setSession(user);
   role = session.role;
   paintChrome();
-  const target = pendingHash || '#/home';
-  pendingHash = null;
   U.toast(`Ciao ${session.name.split(' ')[0]} · ${P.roleLabel(role)}`);
-  if (location.hash === target) render();
-  else location.hash = target;
+  // After signing in you always start from the home page, whatever URL you came
+  // from (an expired session on a sub-page, a shared link, a bookmark).
+  navigate('#/home');
 }
 
 export function logout() {
   A.clearSession();
   session = null;
   role = null;
-  pendingHash = null;
   paintChrome();
   navigate('#/login');
   U.toast('Sessione terminata');
@@ -144,13 +141,9 @@ export function render() {
   document.getElementById('appCrumb').textContent = route.crumb;
   document.title = route.title + ' · Vignero';
 
-  // not signed in → remember the destination, then ask for credentials
-  if (!session && route.cap) {
-    const qs = params.toString();
-    pendingHash = '#' + path + (qs ? '?' + qs : '');
-    navigate('#/login');
-    return;
-  }
+  // not signed in → ask for credentials (the destination is not carried over:
+  // after signing in the user always lands on Home)
+  if (!session && route.cap) { navigate('#/login'); return; }
   // already signed in → the login screen is meaningless
   if (session && path === '/login') { navigate('#/home'); return; }
 
