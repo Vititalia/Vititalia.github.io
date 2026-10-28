@@ -166,6 +166,72 @@ for (const [w, cols] of [[390, 2], [900, 3], [1440, 4]]) {
   await ctx.close();
 }
 
+/* ------------- no banner anywhere may fragment into loose flex items ------------- */
+for (const route of ['#/home', '#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita',
+                     '#/dati/ordini', '#/dati/import']) {
+  const { page, ctx } = await open({ width: 390, height: 844 }, route);
+  const bad = await page.evaluate(() => {
+    return [...document.querySelectorAll('.banner')].map((bn) => {
+      const kids = [...bn.children];
+      const r = bn.getBoundingClientRect();
+      const over = kids.some((k) => {
+        const kr = k.getBoundingClientRect();
+        return kr.right > r.right + 1;
+      });
+      return { kids: kids.length, over, wrap: getComputedStyle(bn).flexWrap };
+    }).filter((x) => x.kids > 2 || x.over || x.wrap !== 'wrap');
+  });
+  ok(bad.length === 0, `${route} @390: every banner is well-formed (${JSON.stringify(bad)})`);
+  await ctx.close();
+}
+
+/* ---------------- info banners must wrap, not fragment or overflow ---------------- */
+for (const w of [390, 1440]) {
+  const { page, ctx } = await open({ width: w, height: 900 }, '#/r/produttore');
+  const d = await page.evaluate(() => {
+    const banner = document.querySelector('.banner');
+    if (!banner) return { none: true };
+    const cs = getComputedStyle(banner);
+    const b = banner.getBoundingClientRect();
+    const kids = [...banner.children];
+    const overflowing = kids.filter((k) => {
+      const r = k.getBoundingClientRect();
+      return r.right > b.right + 1 || r.left < b.left - 1;
+    }).map((k) => k.tagName + '.' + k.className);
+    const codes = [...banner.querySelectorAll('code')].map((c) => {
+      const cs = getComputedStyle(c);
+      return {
+        text: c.textContent,
+        overflows: c.scrollWidth > c.clientWidth + 1,
+        background: cs.backgroundColor,
+        mono: /mono|Courier/i.test(cs.fontFamily),
+      };
+    });
+    return {
+      children: kids.length,
+      flexWrap: cs.flexWrap,
+      scrollW: banner.scrollWidth, clientW: banner.clientWidth,
+      overflowing,
+      codes,
+      height: Math.round(b.height),
+      text: banner.textContent.replace(/\s+/g, ' ').trim(),
+    };
+  });
+  ok(!d.none, `${w}px: per-grower note is rendered`);
+  ok(d.children === 2, `${w}px: banner has exactly icon + text (got ${d.children} children)`);
+  ok(d.flexWrap === 'wrap', `${w}px: banner wraps (got ${d.flexWrap})`);
+  ok(d.overflowing.length === 0, `${w}px: no banner child overflows (${d.overflowing})`);
+  ok(d.scrollW <= d.clientW + 1, `${w}px: banner text does not overflow its box (${d.scrollW}/${d.clientW})`);
+  ok(d.codes.length === 2 && d.codes.every((c) => !c.overflows),
+     `${w}px: the code tokens fit (${JSON.stringify(d.codes)})`);
+  ok(d.codes.every((c) => c.background !== 'rgba(0, 0, 0, 0)'),
+     `${w}px: code tokens are visually distinct (${d.codes.map((c) => c.background).join(' | ')})`);
+  ok(d.codes.every((c) => c.mono), `${w}px: code tokens are set in a monospace face`);
+  ok(/Non attribuito/.test(d.text), `${w}px: the note still explains Non attribuito`);
+  ok(d.height < 220, `${w}px: the note is compact (${d.height}px)`);
+  await ctx.close();
+}
+
 /* ---------------- scrolling must not be reset by the browser chrome ---------------- */
 {
   const { page, ctx } = await open({ width: 390, height: 844 }, '#/r/disponibilita');

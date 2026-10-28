@@ -432,7 +432,10 @@ export function viewPerProduttore(root, ctx) {
 
   const host = root.querySelector('#reportHost');
   host.innerHTML = r.groups.length
-    ? `<div class="banner banner-info">Le colonne produttore derivano da <code>lotti_magazzino.produttore</code>; gli impegni entrano nella colonna di un produttore solo se collegati a un lotto (<code>id_magazzino</code>), altrimenti finiscono in <b>Non attribuito</b>.</div>
+    ? `<div class="banner banner-info"><span aria-hidden="true">i</span>
+         <span>Le quantità a magazzino sono divise per <code>lotti_magazzino.produttore</code>.
+         Un impegno entra nella colonna di un produttore solo se è collegato a un lotto
+         (<code>id_magazzino</code>); altrimenti finisce in <b>Non attribuito</b>.</span></div>
        <div class="report">${U.buildTable({
          caption: 'Disponibilità per produttore, raggruppata per portainnesto. Le prime due colonne restano visibili allo scorrimento orizzontale.',
          scroll: true, cols, rows,
