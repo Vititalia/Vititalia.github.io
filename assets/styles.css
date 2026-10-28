@@ -130,7 +130,7 @@ input:disabled,select:disabled,textarea:disabled{background:var(--canvas);color:
 .field-error{color:var(--danger);font-size:12px;margin-top:4px;font-weight:600}
 input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger-600);border-width:2px}
 .filters{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:12px}
-.filter-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filter-actions{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chip{
   display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 4px 0 10px;border-radius:999px;
@@ -191,7 +191,7 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
   border-bottom:1px solid var(--line);position:relative;
 }
 .grid tr.group th .g-sub{float:right;font-weight:700;color:var(--ink-900)}
-.grid tr.subtotal td{background:var(--brand-50);font-weight:700;color:var(--ink-900);border-top:1.5px solid var(--ink-300)}
+.grid tr.subtotal td{background:var(--brand-50);background-clip:padding-box;font-weight:700;color:var(--ink-900);border-top:1.5px solid var(--ink-300)}
 .grid tr.total td{background:var(--brand-50);font-weight:700;color:var(--ink-900);border-top:2px solid var(--ink-300)}
 .grid tr.negative td{background:var(--danger-50);color:var(--danger);font-weight:700}
 .grid tr.negative td:first-child{box-shadow:inset 3px 0 0 var(--danger-600)}
@@ -289,7 +289,8 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 
 /* ---------- ≥640: tablet ---------- */
 @media (min-width:640px){
-  .filters{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+  .filters{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+  .filter-actions{grid-column:1/-1}
   .kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
   .grid-2{grid-template-columns:1fr 1fr}
   .sheet{left:50%;transform:translateX(-50%);width:min(640px,calc(100% - 32px));border-radius:var(--r-sheet);bottom:24px}
@@ -327,10 +328,17 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
   .grid thead th{position:sticky;top:0;z-index:2;box-shadow:inset 0 -1px 0 var(--line)}
   .table-scroll{max-height:calc(100vh - 260px)}
   .table-scroll .grid thead th{top:0}
-  .table-scroll .grid td.ident,.table-scroll .grid th:first-child{position:sticky;left:0;background:var(--surface);z-index:1}
-  .table-scroll .grid thead th:first-child{background:var(--canvas);z-index:3}
-  .table-scroll .grid td.ident{box-shadow:inset -1px 0 0 var(--line)}
-  .table-scroll .grid tr.negative td.ident{background:var(--danger-50)}
+  /* freeze the clone and rootstock columns of the 16-column matrix */
+  .table-scroll .grid.matrix th:nth-child(1),.table-scroll .grid.matrix td:nth-child(1),
+  .table-scroll .grid.matrix th:nth-child(2),.table-scroll .grid.matrix td:nth-child(2){
+    position:sticky;z-index:2;width:132px;min-width:132px;max-width:132px;background:var(--surface)}
+  .table-scroll .grid.matrix th:nth-child(1),.table-scroll .grid.matrix td:nth-child(1){left:0}
+  .table-scroll .grid.matrix th:nth-child(2),.table-scroll .grid.matrix td:nth-child(2){left:132px;box-shadow:inset -1px 0 0 var(--line)}
+  .table-scroll .grid.matrix thead th:nth-child(1),.table-scroll .grid.matrix thead th:nth-child(2){background:var(--canvas);z-index:3}
+  .table-scroll .grid.matrix tr.subtotal td:nth-child(1),.table-scroll .grid.matrix tr.subtotal td:nth-child(2),
+  .table-scroll .grid.matrix tr.total td:nth-child(1),.table-scroll .grid.matrix tr.total td:nth-child(2){background:var(--brand-50)}
+  .table-scroll .grid.matrix tr.negative td:nth-child(1),.table-scroll .grid.matrix tr.negative td:nth-child(2){background:var(--danger-50)}
+  .table-scroll .grid td.ident{background-color:inherit}
 }
 @media (min-width:1440px){
   main{padding:24px 32px 48px}

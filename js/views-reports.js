@@ -267,51 +267,36 @@ export function viewDisponibilita(root, ctx) {
   reportShell(root, {
     eyebrow: 'Riepiloghi / Disponibilità',
     title: 'Riepilogo disponibilità',
-    sub: `${r.rowCount} combinazioni · ${r.groups.length} portainnesti · ${r.negativeCount} in negativo · aggiornato ${stamp}`,
+    sub: `${r.rowCount} combinazioni · ${r.negativeCount} in negativo · aggiornato ${stamp}`,
     actions: `<button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
   });
 
   filterBar(root.querySelector('#filterHost'), f,
-    (next) => ctx.navigate('#/r/disponibilita' + serializeFilters(next)));
+    (next) => ctx.navigate('#/r/disponibilita' + serializeFilters(next)),
+    { showPortainnesto: true });
 
-  const rows = [];
-  for (const g of r.groups) {
-    rows.push({
-      type: 'group',
-      cells: [{ html: `▦ ${U.esc(g.portainnesto)}`, sub: `Totale portainnesto ${U.fmtSigned(g.sub.disponibilita)}` }],
-    });
-    for (const row of g.rows) {
-      const neg = row.disponibilita < 0;
-      rows.push({
-        type: 'row',
-        cls: neg ? 'trow negative' : 'trow',
-        cells: [
-          { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-          U.metric('Magazzino', U.fmtQty(row.mag)),
-          U.metric('Ordinato', U.fmtQty(row.ord)),
-          U.metric('Di cui spedito', U.fmtQty(row.sped)),
-          U.metric('Da spedire', U.fmtQty(row.daSpedire)),
-          U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg }),
-        ],
-      });
-    }
-    rows.push({
-      type: 'subtotal',
+  const rows = r.rows.map((row) => {
+    const neg = row.disponibilita < 0;
+    return {
+      type: 'row',
+      cls: neg ? 'trow negative' : 'trow',
       cells: [
-        { html: `Totale portainnesto <span class="mono">${U.esc(g.portainnesto)}</span>`, cls: 'ident' },
-        { html: U.fmtQty(g.sub.mag), cls: 'r metric', label: 'Magazzino' },
-        { html: U.fmtQty(g.sub.ord), cls: 'r metric', label: 'Ordinato' },
-        { html: U.fmtQty(g.sub.sped), cls: 'r metric', label: 'Di cui spedito' },
-        { html: U.fmtQty(g.sub.daSpedire), cls: 'r metric', label: 'Da spedire' },
-        { html: `<span class="${g.sub.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(g.sub.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
+        { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto' },
+        U.metric('Magazzino', U.fmtQty(row.mag)),
+        U.metric('Ordinato', U.fmtQty(row.ord)),
+        U.metric('Di cui spedito', U.fmtQty(row.sped)),
+        U.metric('Da spedire', U.fmtQty(row.daSpedire)),
+        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg }),
       ],
-    });
-  }
-  if (r.groups.length) {
+    };
+  });
+  if (r.rows.length) {
     rows.push({
       type: 'total',
       cells: [
         { html: 'Totale generale', cls: 'ident' },
+        { html: '', label: 'Portainnesto' },
         { html: U.fmtQty(r.totals.mag), cls: 'r metric', label: 'Magazzino' },
         { html: U.fmtQty(r.totals.ord), cls: 'r metric', label: 'Ordinato' },
         { html: U.fmtQty(r.totals.sped), cls: 'r metric', label: 'Di cui spedito' },
@@ -322,7 +307,7 @@ export function viewDisponibilita(root, ctx) {
   }
 
   const host = root.querySelector('#reportHost');
-  if (!r.groups.length) {
+  if (!r.rows.length) {
     host.innerHTML = U.emptyState({
       icon: '◇', title: 'Nessun dato con i filtri selezionati',
       text: 'Rimuovi i filtri per vedere tutte le combinazioni.', action: 'Rimuovi filtri',
@@ -331,25 +316,25 @@ export function viewDisponibilita(root, ctx) {
       () => ctx.navigate('#/r/disponibilita'));
   } else {
     host.innerHTML = `<div class="report">${U.buildTable({
-      caption: 'Raggruppato per portainnesto, ordinato per codice portainnesto e clone. Rosso = disponibilità negativa.',
-      cols: [{ label: 'Codice clone' }, { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
-             { label: 'Di cui spedito', align: 'r' }, { label: 'Da spedire', align: 'r' }, { label: 'Disponibilità', align: 'r' }],
+      caption: {
+        wide: 'Un rigo per combinazione varietà/clone/portainnesto, ordinato per codice portainnesto e clone. Rosso = disponibilità negativa.',
+        narrow: 'Un rigo per clone, ordinato per portainnesto. Rosso = disponibilità negativa.',
+      },
+      cols: [{ label: 'Codice clone' }, { label: 'Codice portainnesto' }, { label: 'Magazzino', align: 'r' },
+             { label: 'Ordinato', align: 'r' }, { label: 'Di cui spedito', align: 'r' },
+             { label: 'Da spedire', align: 'r' }, { label: 'Disponibilità', align: 'r' }],
       rows,
     })}</div>`;
   }
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
-    const out = [];
-    for (const g of r.groups) {
-      for (const row of g.rows) {
-        out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped, row.daSpedire, row.disponibilita]);
-      }
-      out.push(['Totale portainnesto', '', g.portainnesto, g.sub.mag, g.sub.ord, g.sub.sped, g.sub.daSpedire, g.sub.disponibilita]);
-    }
-    out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped, r.totals.daSpedire, r.totals.disponibilita]);
+    const out = r.rows.map((row) => [row.clone, row.varieta, row.portainnesto,
+      row.mag, row.ord, row.sped, row.daSpedire, row.disponibilita]);
+    out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped,
+              r.totals.daSpedire, r.totals.disponibilita]);
     U.exportCSV(`disponibilita_${U.nowStamp()}.csv`,
-      ['Codice clone', 'Codice varietà', 'Codice portainnesto', 'Magazzino', 'Ordinato', 'Di cui spedito', 'Da spedire', 'Disponibilità'],
-      out);
+      ['Codice clone', 'Codice varietà', 'Codice portainnesto', 'Magazzino', 'Ordinato',
+       'Di cui spedito', 'Da spedire', 'Disponibilità'], out);
   });
 }
 
@@ -441,7 +426,7 @@ export function viewPerProduttore(root, ctx) {
            wide: 'Disponibilità per produttore, raggruppata per portainnesto. Le prime due colonne restano visibili allo scorrimento orizzontale.',
            narrow: 'Disponibilità per produttore, raggruppata per portainnesto.',
          },
-         scroll: true, cols, rows,
+         scroll: true, cols, rows, tableClass: 'matrix',
        })}</div>`
     : U.emptyState({ icon: '◇', title: 'Nessun dato con i filtri selezionati', text: 'Rimuovi i filtri.', action: 'Rimuovi filtri' });
   if (!r.groups.length) {

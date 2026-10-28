@@ -22,7 +22,7 @@ const eq = (a, b, what) => { if (Number(a) !== Number(b)) fail(`${what}: engine=
 /* ---- Report 1 vs riepilogo_disponibilita ---- */
 const r1 = reportDisponibilita({});
 const mine = new Map();
-for (const g of r1.groups) for (const row of g.rows) {
+for (const row of r1.rows) {
   mine.set([row.tipologia, row.produzione, row.varieta, row.clone, row.portainnesto].join('|'), row);
 }
 const viewRows = fixtures.riepilogo;
@@ -39,8 +39,8 @@ for (const v of viewRows) {
   eq(m.daSpedire, dasped, `da spedire ${clone}/${root}`);
   eq(m.disponibilita, disp, `disponibilità ${clone}/${root}`);
 }
-const subCheck = r1.groups.reduce((s, g) => s + g.sub.disponibilita, 0);
-eq(r1.totals.disponibilita, subCheck, 'total == sum of subtotals');
+const subCheck = r1.rows.reduce((s, r) => s + r.disponibilita, 0);
+eq(r1.totals.disponibilita, subCheck, 'grand total == sum of rows');
 
 /* ---- Report 3 vs vista_disponibilita_negative ---- */
 const r3 = reportIndisponibilita({});

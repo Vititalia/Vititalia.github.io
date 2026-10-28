@@ -48,8 +48,8 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 |---|---|---|
 | `#/login` | Accedi | email + password, one account per profile, session of 8 h; **signing in always opens Home** |
 | `#/home` | Panoramica | launcher: one tile per page the role can open | 4 KPIs, recent lots, top shortages, report shortcuts |
-| `#/r/disponibilita` | Riepilogo disponibilità | grouped by rootstock, **Totale portainnesto** subtotals, negative rows bold red |
-| `#/r/produttore` | Riepilogo per produttore | 16 columns: 8 growers + *Non attribuito* + total, frozen first columns |
+| `#/r/disponibilita` | Riepilogo disponibilità | **flat list** — rootstock is a column and a filter; single grand total; negative rows bold red |
+| `#/r/produttore` | Riepilogo per produttore | grouped by rootstock with **Totale portainnesto** subtotals; 16 columns: 8 growers + *Non attribuito* + total; clone and rootstock columns frozen |
 | `#/r/indisponibilita` | Indisponibilità | deficit only, sorted varietà → portainnesto → clone |
 | `#/dati/lotti` | Lotti magazzino | entry form with dependent variety → clone select |
 | `#/dati/ordini` | Ordini e impegni | inline *Spedito* toggle with undo, lot picker prefills dimensions |
@@ -59,8 +59,9 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 | `#/config/permessi` | Ruoli e permessi | the matrix the app enforces |
 | `#/profilo` | Profilo | session + logout, reset local edits, demo accounts |
 
-Filters (Tipologia, Produzione, searchable Codice varietà) are single-select and live **in the URL**,
-so a filtered report can be shared or refreshed.
+Filters are single-select and live **in the URL**, so a filtered report can be shared or refreshed:
+Tipologia, Produzione and searchable Codice varietà everywhere, plus **Codice portainnesto** on the
+availability report (where the rootstock is a filter rather than a grouping level).
 
 ### Home as a launcher
 

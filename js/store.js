@@ -128,6 +128,7 @@ function passes(row, f) {
   if (f.tipologia && (row.tipologia || NON_INDICATA) !== f.tipologia) return false;
   if (f.produzione && (row.produzione || NON_INDICATA) !== f.produzione) return false;
   if (f.varieta && row.varieta !== f.varieta) return false;
+  if (f.portainnesto && row.portainnesto !== f.portainnesto) return false;
   return true;
 }
 
@@ -186,31 +187,24 @@ export function metrics(filters) {
 
 const zero = () => ({ mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
 
-/** Report 1 — grouped by rootstock, one row per clone, per-rootstock subtotals. */
+/**
+ * Report 1 — flat list of combinations, sorted by rootstock code then clone.
+ * The rootstock is a *filter* and a column, not a grouping level: there are no
+ * per-rootstock subtotals, only one grand total.
+ */
 export function reportDisponibilita(filters) {
   const m = metrics(filters);
   const C = collator();
-  const groups = new Map();
-  for (const e of m.values()) {
-    if (!groups.has(e.portainnesto)) {
-      groups.set(e.portainnesto, { portainnesto: e.portainnesto, rows: [], sub: zero(), negative: false });
-    }
-    groups.get(e.portainnesto).rows.push(e);
-  }
-  const out = [...groups.values()].sort((a, b) => C.compare(a.portainnesto, b.portainnesto));
-  for (const g of out) {
-    g.rows.sort((a, b) => C.compare(a.clone, b.clone) || C.compare(a.varieta, b.varieta));
-    for (const r of g.rows) {
-      for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) g.sub[k] += r[k];
-    }
-    g.negative = g.rows.some((r) => r.disponibilita < 0);
-  }
-  const totals = out.reduce((t, g) => {
-    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += g.sub[k];
+  const rows = [...m.values()].sort((a, b) =>
+    C.compare(a.portainnesto, b.portainnesto) ||
+    C.compare(a.clone, b.clone) ||
+    C.compare(a.varieta, b.varieta));
+  const totals = rows.reduce((t, r) => {
+    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
     return t;
   }, zero());
-  const negativeCount = out.reduce((n, g) => n + g.rows.filter((r) => r.disponibilita < 0).length, 0);
-  return { groups: out, totals, negativeCount, rowCount: out.reduce((n, g) => n + g.rows.length, 0) };
+  const negativeCount = rows.filter((r) => r.disponibilita < 0).length;
+  return { rows, totals, negativeCount, rowCount: rows.length };
 }
 
 /** Report 2 — availability split across the 8 growers, plus unattributed. */

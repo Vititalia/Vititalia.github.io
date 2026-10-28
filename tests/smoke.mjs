@@ -142,7 +142,7 @@ ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before si
 /* ---------------- route matrix ---------------- */
 const CASES = [
   ['admin', '#/home', ['Disponibilità totale', 'Riepiloghi', 'da dove vuoi iniziare']],
-  ['admin', '#/r/disponibilita', ['Riepilogo disponibilità', 'Totale portainnesto', 'Da spedire']],
+  ['admin', '#/r/disponibilita', ['Riepilogo disponibilità', 'Totale generale', 'Da spedire', 'Codice portainnesto']],
   ['admin', '#/r/produttore', ['Riepilogo per produttore', 'Non attribuito', 'Tot. produttori']],
   ['admin', '#/r/indisponibilita', ['Indisponibilità', 'Deficit']],
   ['admin', '#/dati/lotti', ['Lotti magazzino', 'Nuovo lotto']],
@@ -216,6 +216,34 @@ desktop = true;
   await wait(40);
   ok(window.location.hash === '#/anagrafiche/viti', 'tapping a tile navigates to the page');
   ok(text().includes('Anagrafica vite'), 'the page opened from the tile renders');
+}
+
+/* ---------------- disponibilità: flat list, rootstock is a filter ---------------- */
+{
+  await loginAs('admin');
+  await go('#/r/disponibilita');
+  const shape = {
+    groups: document.querySelectorAll('.grid tbody tr.group').length,
+    subtotals: document.querySelectorAll('.grid tbody tr.subtotal').length,
+    totals: document.querySelectorAll('.grid tbody tr.total').length,
+    cols: document.querySelectorAll('.grid thead th').length,
+    filterLabels: [...document.querySelectorAll('#filterHost .field > span')].map((s2) => s2.textContent.trim()),
+  };
+  ok(shape.groups === 0, `no rootstock grouping (${shape.groups} group rows)`);
+  ok(shape.subtotals === 0, `no rootstock subtotals (${shape.subtotals})`);
+  ok(shape.totals === 1, `one grand total row (${shape.totals})`);
+  ok(shape.cols === 7, `7 columns, rootstock included (${shape.cols})`);
+  ok(shape.filterLabels.includes('Codice portainnesto'),
+     `portainnesto is a filter (${JSON.stringify(shape.filterLabels)})`);
+
+  /* the filter is in the URL and narrows the table */
+  const root = '110 RICHTER';
+  await go('#/r/disponibilita?portainnesto=' + encodeURIComponent(root));
+  const roots = [...document.querySelectorAll('.grid tbody tr.trow td[data-label="Portainnesto"]')]
+    .map((td) => td.textContent.trim());
+  ok(roots.length > 0, `rootstock filter returns rows (${roots.length})`);
+  ok(roots.every((x) => x === root), 'every row shows the filtered rootstock');
+  ok(document.querySelectorAll('.chip').length === 1, 'the active rootstock is shown as a chip');
 }
 
 /* filters via URL */

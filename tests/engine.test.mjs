@@ -23,34 +23,33 @@ ok(store.meta.produttori.length === 8, 'eight growers configured');
 
 /* ---------- report 1 ---------- */
 const r1 = reportDisponibilita({});
-ok(r1.groups.length > 0, 'report 1 has groups');
-let rows = 0, negRows = 0, sumSub = 0;
-for (const g of r1.groups) {
-  let sm = 0, so = 0, ss = 0, sd = 0, sdis = 0;
-  for (const r of g.rows) {
-    rows++;
-    near(r.daSpedire, r.ord - r.sped, 'daSpedire = ordinato - spedito');
-    near(r.disponibilita, r.mag - r.ord, 'disponibilita = magazzino - ordinato');
-    if (r.disponibilita < 0) negRows++;
-    sm += r.mag; so += r.ord; ss += r.sped; sd += r.daSpedire; sdis += r.disponibilita;
-  }
-  near(g.sub.mag, sm, 'subtotal magazzino ' + g.portainnesto);
-  near(g.sub.ord, so, 'subtotal ordinato ' + g.portainnesto);
-  near(g.sub.sped, ss, 'subtotal spedito ' + g.portainnesto);
-  near(g.sub.daSpedire, sd, 'subtotal da spedire ' + g.portainnesto);
-  near(g.sub.disponibilita, sdis, 'subtotal disponibilita ' + g.portainnesto);
-  sumSub += sdis;
+ok(Array.isArray(r1.rows) && r1.rows.length > 0, 'report 1 returns a flat list of rows');
+ok(r1.groups === undefined, 'report 1 is no longer grouped by rootstock');
+let rows = 0, negRows = 0;
+let sumDisp = 0, sumMag = 0, sumOrd = 0, sumSped = 0, sumDaSped = 0;
+for (const r of r1.rows) {
+  rows++;
+  near(r.daSpedire, r.ord - r.sped, 'daSpedire = ordinato - spedito');
+  near(r.disponibilita, r.mag - r.ord, 'disponibilita = magazzino - ordinato');
+  if (r.disponibilita < 0) negRows++;
+  sumMag += r.mag; sumOrd += r.ord; sumSped += r.sped;
+  sumDaSped += r.daSpedire; sumDisp += r.disponibilita;
 }
-near(r1.totals.disponibilita, sumSub, 'total = sum of subtotals');
+near(r1.totals.mag, sumMag, 'grand total magazzino = sum of rows');
+near(r1.totals.ord, sumOrd, 'grand total ordinato = sum of rows');
+near(r1.totals.sped, sumSped, 'grand total spedito = sum of rows');
+near(r1.totals.daSpedire, sumDaSped, 'grand total da spedire = sum of rows');
+near(r1.totals.disponibilita, sumDisp, 'grand total disponibilità = sum of rows');
 near(r1.negativeCount, negRows, 'negativeCount = rows with disponibilità < 0');
-near(r1.rowCount, rows, 'rowCount matches rendered rows');
+near(r1.rowCount, rows, 'rowCount matches the rendered rows');
 
-/* ordering: rootstocks ascending, clones ascending inside a group */
+/* ordering: rootstock code, then clone */
 const C = new Intl.Collator('it', { numeric: true, sensitivity: 'base' });
-const roots = r1.groups.map((g) => g.portainnesto);
-ok(roots.every((v, i) => i === 0 || C.compare(roots[i - 1], v) <= 0), 'groups sorted by rootstock');
-ok(r1.groups.every((g) => g.rows.every((r, i) => i === 0 || C.compare(g.rows[i - 1].clone, r.clone) <= 0)),
-   'rows sorted by clone');
+ok(r1.rows.every((r, i) => i === 0 ||
+   C.compare(r1.rows[i - 1].portainnesto, r.portainnesto) < 0 ||
+   (r1.rows[i - 1].portainnesto === r.portainnesto &&
+    C.compare(r1.rows[i - 1].clone, r.clone) <= 0)),
+   'rows sorted by rootstock code, then clone');
 
 /* ---------- report 2 ---------- */
 const r2 = reportPerProduttore({});
@@ -82,11 +81,20 @@ ok(r3.rows.every((r, i) => i === 0 ||
 /* ---------- filters ---------- */
 const varieta = store.index.varieta.find((v) => store.lotti.some((l) => l.varieta === v));
 const f1 = reportDisponibilita({ varieta });
-ok(f1.groups.every((g) => g.rows.every((r) => r.varieta === varieta)), 'variety filter applies');
+ok(f1.rows.every((r) => r.varieta === varieta), 'variety filter applies');
 ok(f1.rowCount < r1.rowCount, 'variety filter narrows the result');
 const tipo = store.meta.tipologie.find((t) => store.lotti.some((l) => l.tipologia === t));
 const f2 = reportDisponibilita({ tipologia: tipo });
-ok(f2.groups.every((g) => g.rows.every((r) => r.tipologia === tipo)), 'tipologia filter applies');
+ok(f2.rows.every((r) => r.tipologia === tipo), 'tipologia filter applies');
+const root = store.index.rootstocks.find((c) => store.lotti.some((l) => l.portainnesto === c));
+const f3 = reportDisponibilita({ portainnesto: root });
+ok(f3.rows.length > 0, 'rootstock filter returns rows');
+ok(f3.rows.every((r) => r.portainnesto === root), 'rootstock filter applies');
+ok(f3.rowCount < r1.rowCount, 'rootstock filter narrows the result');
+const f4 = reportDisponibilita({ portainnesto: root, tipologia: tipo });
+ok(f4.rows.every((r) => r.portainnesto === root && r.tipologia === tipo), 'filters combine');
+near(sumOf(f4.rows, 'disponibilita'), f4.totals.disponibilita, 'totals follow the filters');
+function sumOf(list, k) { return list.reduce((s, r) => s + r[k], 0); }
 
 /* ---------- validation ---------- */
 const anyVariety = store.index.varieta.find((v) => clonesOf(v).length > 0);

@@ -34,7 +34,7 @@
 | R6 | 4 roles, different capabilities | §2 |
 | R7 | Availability summary (`riepilogo_disponibilità`) with entered/ordered/shipped/available | §3.5, S-04, S-05 |
 | R8 | Filters Tipologia / Produzione / Codice varietà (searchable) | S-10, S-04, S-05 |
-| R9 | Grouping by clone + rootstock, sort by rootstock, subtotals per rootstock | §3.6, S-04, S-05 |
+| R9 | Grouping by clone + rootstock, sort by rootstock, subtotals per rootstock — **superseded**: the rootstock became a filter, no grouping (§15.3 PD-1) | §3.6, S-04, S-05 |
 | R10 | Negative availability → whole row bold red | §3.7, S-04, S-08 |
 | R11 | Per-grower availability summary (Admin + Amministrazione only) | S-06, S-07 |
 | R12 | Unavailability/shortages report | S-08, S-09 |
@@ -283,13 +283,13 @@ Null-dimension handling
 | Aspect | Specification |
 |---|---|
 | Source | `lotti_magazzino` ⟕ `ordini_impegni` on the grouping key |
-| Filters | `tipologia` (4 values), `produzione` (3 values), `codice_varieta` (searchable, from `anagrafica_vite`); each single-select; plus an optional **year** filter on `anno_conferimento` (§15 Q4) |
-| Grouping | by `codice_portainnesto` → rows per `codice_clone` |
-| Columns | Codice clone · Magazzino · Ordinato · Di cui spedito · Disponibilità |
+| Filters | `tipologia` (4 values), `produzione` (3 values), `codice_varieta` (searchable, from `anagrafica_vite`), **`codice_portainnesto` (searchable)**; each single-select; plus an optional **year** filter on `anno_conferimento` (§15 Q4) |
+| Layout | **Flat list**: one row per combination. The rootstock is a filter and a column, **not** a grouping level — there are no group headers and no per-rootstock subtotals (decision PD-1, §15.3) |
+| Columns | Codice clone (+ variety) · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Da spedire · Disponibilità |
 | Sort | `codice_portainnesto` ASC, then `codice_clone` ASC |
-| Subtotals | per rootstock, label **"Totale portainnesto"** + rootstock code, sums of the four quantities, bold on a tinted row |
+| Totals | one **"Totale generale"** row only |
 | Alert | Disponibilità < 0 → whole row bold red + `!` icon + red left border |
-| Extra | "Totale generale" row (§15 Q5) |
+| Export | CSV/Excel/PDF of the filtered rows plus the grand total |
 
 **Report 2 — Riepilogo disponibilità per produttore** (Admin, Amministrazione)
 
@@ -398,7 +398,7 @@ Rules that apply at every breakpoint
 
 - R-1 The filter bar is **always visible above the table**, never behind a menu (requirement: "Filters at the top").
 - R-2 Active filters are shown as removable chips; a `Rimuovi filtri` reset is always present when any filter is active.
-- R-3 Subtotal rows keep the exact label **"Totale portainnesto"** + rootstock code in every layout.
+- R-3 Where a rootstock subtotal exists (Report 2 only) it keeps the exact label **"Totale portainnesto"** + rootstock code in every layout.
 - R-4 The red-negative treatment is identical in all layouts: bold + red text + icon + left border.
 - R-5 Horizontal scrolling is forbidden on the page; only inside a data table (`md`+ per-grower report).
 - R-6 Pinch-to-zoom is disabled in the app shell (`user-scalable=no`) because the layouts are already at readable scale — the grid at `md`+ has its own zoom control.
@@ -428,7 +428,7 @@ Below that:
 
 1. **The number is the interface.** These screens exist to show quantities. Chrome is quiet, numbers are large, aligned and tabular.
 2. **Red means oversold.** Red is reserved exclusively for negative availability and destructive actions. It is never decorative, never used for "warning" or branding.
-3. **A subtotal is a promise.** "Totale portainnesto" rows are visually unmistakable (bold + tint) in every layout, so no one sums the wrong column by accident.
+3. **A subtotal is a promise.** Where a level of aggregation exists (the per-grower report) its "Totale portainnesto" row is visually unmistakable — bold + tint in every layout — so no one sums the wrong column by accident. Report 1 has no subtotals at all: its only aggregate is the grand total.
 4. **Filter first, then read.** Filters sit at the top, are single-select, and never hide the current result while they load (stale-while-revalidate with a subtle dim).
 5. **Never let a phone pretend to be a workstation.** Editing on a phone is refused explicitly, not approximated.
 6. **Master data is the only vocabulary.** Every place a variety, clone or rootstock appears it comes from a select — free text is a defect.
@@ -511,7 +511,7 @@ Stack: `-apple-system, "Segoe UI", Roboto, Inter, sans-serif`. Numeric tables: `
 | C-08 | Report card group (`xs`) | rootstock header with subtotal, clone rows, metric strip |
 | C-09 | Metric strip | 4 cells, label above value, negative cell red bold |
 | C-10 | Data grid (`md`+) | sticky header, zebra, subtotal row, negative row, sorted column, column chooser, frozen first col |
-| C-11 | Subtotal row | "Totale portainnesto" + code, bold, tinted, top border |
+| C-11 | Subtotal row | used by Report 2 only: "Totale portainnesto" + code, bold, tinted, top border |
 | C-12 | Negative row treatment | tint + bold red + `!` + left border |
 | C-13 | Button | primary, secondary, ghost, danger, icon, loading, disabled |
 | C-14 | Text/number field | default, focus, filled, error + message, suffix unit, disabled-with-reason |
@@ -721,12 +721,12 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 
 | Zone | Spec |
 |---|---|
-| Sticky filter bar (C-04) | Three compact selectors showing current values (`Tipologia ▾`, `Produzione ▾`, `Codice varietà 🔍 ▾`), 44 dp tall, `elev-2`, sticky under the app bar. Trailing `Filtri` icon button opens S-10 (full-screen on `xs`) |
+| Sticky filter bar (C-04) | Four compact selectors showing current values (`Tipologia ▾`, `Produzione ▾`, `Codice varietà 🔍 ▾`, `Codice portainnesto 🔍 ▾`), 44 dp tall, `elev-2`, sticky under the app bar. Trailing `Filtri` icon button opens S-10 (full-screen on `xs`) |
 | Active filter chips (C-05) | Shown only when filters are active: `Tipologia: Barbatelle innestate ✕` etc. + `Azzera` |
 | Summary strip | "3 portainnesti · 24 cloni · aggiornato 14:32" + a red pill `2 in negativo` when applicable |
-| Group cards (C-08) | One card per rootstock: header = rootstock code + `Totale` disponibilità (bold, `brand-50` background); body = clone rows |
+| Row cards | One card per combination: `Codice clone` (with the variety beneath) and `Codice portainnesto` on the identity line, then the metric strip |
 | Clone row (C-09) | Line 1: `Codice clone` (body-strong) + `!` icon if negative. Line 2: metric strip of 4 cells — Magazzino / Ordinato / Di spedito / **Disponibilità**. Negative disponibilità cell: `danger-50` background, `danger-700` bold. Whole row: `danger-50` tint + 3 dp `danger-600` left border + bold text |
-| Final row | "Totale generale" card, same treatment as group headers but with a 2 dp top border |
+| Final row | "Totale generale" card, bold on `brand-50` with a 2 dp top border |
 | Bottom tab bar | Persistent |
 
 **Interactions**
@@ -750,7 +750,8 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 
 **AC**
 
-- AC-1 Subtotals per rootstock are always present and labelled exactly "Totale portainnesto" + the rootstock code (shown in the group header, replacing the clone code position).
+- AC-1 The list is flat: no rootstock group headers and no per-rootstock subtotals; the only aggregate is the final "Totale generale" row.
+- AC-1b The rootstock appears as its own column on every row and as a **filter** in the filter bar.
 - AC-2 Every row with Disponibilità < 0 is bold and red across the whole row, with an icon; contrast ≥ 4.5:1.
 - AC-3 Sort order is rootstock code, then clone code — identical to the desktop grid.
 - AC-4 Filters are single-select; Codice varietà offers a search field; changing any filter updates the URL query string.
@@ -781,7 +782,7 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 | Disponibilità | right | 140 | bold; red when negative |
 
 - Sticky header (36 dp) + sticky first column; row height 36 dp; zebra `#FBFCFD` on even rows where no tint applies.
-- Subtotal row per rootstock: label **"Totale portainnesto"** in the Codice clone cell, rootstock code in its own cell, every numeric cell summed, `brand-50` background, bold, 1.5 dp top border. `aria-rowindex` grouping semantics.
+- Flat rows: the rootstock is a normal column (not a group header), so the table has no subtotal rows; the sticky footer carries the grand total.
 - Negative rows: `danger-50` background, `danger-700` bold, 3 dp left border.
 - Sorting: default rootstock → clone (per requirement); clicking a numeric header sorts client-side within the current result and shows a sort indicator with an `aria-sort` attribute; a *Ripristina ordine* action returns to the required order.
 - Column chooser remembers the choice per user (localStorage, non-secret).
@@ -810,7 +811,7 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 
 | Zone | Spec |
 |---|---|
-| Group card | Header: rootstock code + group `Totale` disponibilità |
+| Row card | Identity line: rootstock code + clone code |
 | Clone row | Line 1: clone code + total Disponibilità (bold). Line 2: mini strip Magazzino / Ordinato / Spedito. Line 3: **"Per produttore"** — a horizontally scrollable strip of grower chips (`Mori Marco` `120`, `Donati` `0`, `Agriserv` `−80` …) within the row, each chip 88 dp wide |
 | Negative | A negative *grower* value colours that chip red-bold; a negative *total* colours the whole row as in S-04 |
 | Overflow affordance | A fade gradient + `›` at the strip edge signals more growers; tapping any chip opens S-11 scoped to that grower |
@@ -1479,6 +1480,14 @@ Status after reconciling `docs/db-schema.sql`.
 | Q15 | `lotti_magazzino.tipologia/produzione` are nullable while the same columns are `NOT NULL` on orders. Are null lots legacy data to clean up or a valid state? | Tolerated: grouped as "(non indicata)" with a data-quality badge (§3.5) | Business |
 | Q16 | Authentication source — Supabase Auth, SSO, or local users? | Email + password managed by the app, no SSO in v1 | Tech |
 | Q17 | Is "Esterno" a real grower with the same rights as the others? | Treated as an equal grower (non-member supplier bucket) | Business |
+
+---
+
+### 15.3 Product decisions that override the requirements
+
+| # | Decision | Rationale | Effect |
+|---|---|---|---|
+| **PD-1** | **Report 1 is no longer grouped by rootstock**: the rootstock is a filter and a column, and the only aggregate is the grand total | One flat list reads better on a phone and lets the office isolate a single rootstock in one tap instead of scrolling to its group; the per-grower report keeps the grouped/subtotal layout | Supersedes requirement R9's grouping/subtotal rule for Report 1. R10 (red negative rows) still holds. Report 2 is unchanged |
 
 ---
 

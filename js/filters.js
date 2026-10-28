@@ -2,19 +2,20 @@
 import * as S from './store.js';
 import * as U from './ui.js';
 
-export const EMPTY = { tipologia: '', produzione: '', varieta: '' };
+export const EMPTY = { tipologia: '', produzione: '', varieta: '', portainnesto: '' };
 
 export function parseFilters(params) {
   return {
     tipologia: params.get('tipologia') || '',
     produzione: params.get('produzione') || '',
     varieta: params.get('varieta') || '',
+    portainnesto: params.get('portainnesto') || '',
   };
 }
 
 export function serializeFilters(f) {
   const p = new URLSearchParams();
-  for (const k of ['tipologia', 'produzione', 'varieta']) if (f[k]) p.set(k, f[k]);
+  for (const k of ['tipologia', 'produzione', 'varieta', 'portainnesto']) if (f[k]) p.set(k, f[k]);
   const s = p.toString();
   return s ? '?' + s : '';
 }
@@ -24,6 +25,7 @@ export function activeChips(f) {
   if (f.tipologia) out.push({ key: 'tipologia', label: 'Tipologia: ' + f.tipologia });
   if (f.produzione) out.push({ key: 'produzione', label: 'Produzione: ' + f.produzione });
   if (f.varieta) out.push({ key: 'varieta', label: 'Varietà: ' + f.varieta });
+  if (f.portainnesto) out.push({ key: 'portainnesto', label: 'Portainnesto: ' + f.portainnesto });
   return out;
 }
 
@@ -33,6 +35,7 @@ export function activeChips(f) {
  */
 export function filterBar(host, filters, onChange, opts = {}) {
   const showVarieta = opts.showVarieta !== false;
+  const showPortainnesto = opts.showPortainnesto === true;
   const tid = 'f-tip-' + Math.random().toString(36).slice(2, 7);
   const pid = 'f-prod-' + Math.random().toString(36).slice(2, 7);
 
@@ -58,6 +61,10 @@ export function filterBar(host, filters, onChange, opts = {}) {
         <span id="${tid}-v">Codice varietà</span>
         <div id="${tid}-combo"></div>
       </div>
+      <div class="field" style="margin:0" ${showPortainnesto ? '' : 'hidden'}>
+        <span>Codice portainnesto</span>
+        <div id="${tid}-root"></div>
+      </div>
       <div class="filter-actions">
         <button class="btn btn-secondary" type="button" data-reset>Azzera</button>
       </div>
@@ -82,9 +89,18 @@ export function filterBar(host, filters, onChange, opts = {}) {
     });
     if (filters.varieta) combo.set(filters.varieta);
   }
+  if (showPortainnesto) {
+    const rootCombo = U.combobox(host.querySelector(`#${tid}-root`), {
+      items: S.store.index.rootstocks.map((r) => ({ value: r, label: r })),
+      placeholder: 'Cerca portainnesto…',
+      value: filters.portainnesto || '',
+      onPick: (value) => next({ portainnesto: value }),
+    });
+    if (filters.portainnesto) rootCombo.set(filters.portainnesto);
+  }
 
   host.querySelector('[data-reset]').addEventListener('click', () => {
-    if (!filters.tipologia && !filters.produzione && !filters.varieta) return;
+    if (!filters.tipologia && !filters.produzione && !filters.varieta && !filters.portainnesto) return;
     onChange({ ...EMPTY });
   });
 

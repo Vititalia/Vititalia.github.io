@@ -114,31 +114,95 @@ for (const route of ROUTES) {
   await ctx.close();
 }
 
-/* reports must show subtotal rows and red negative rows on PC */
+/* the two frozen columns must stay put while the matrix scrolls */
+{
+  const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/produttore');
+  const pin = await page.evaluate(async () => {
+    const scroller = document.querySelector('.table-scroll');
+    const before = {
+      c1: Math.round(document.querySelector('.grid tbody tr.trow td:nth-child(1)').getBoundingClientRect().left),
+      c2: Math.round(document.querySelector('.grid tbody tr.trow td:nth-child(2)').getBoundingClientRect().left),
+      panel: Math.round(scroller.getBoundingClientRect().left),
+    };
+    scroller.scrollLeft = 420;
+    await new Promise((r) => setTimeout(r, 120));
+    const cell1 = document.querySelector('.grid tbody tr.trow td:nth-child(1)');
+    const cell2 = document.querySelector('.grid tbody tr.trow td:nth-child(2)');
+    const sub = document.querySelector('.grid tbody tr.subtotal td:nth-child(1)');
+    return {
+      before,
+      after: {
+        c1: Math.round(cell1.getBoundingClientRect().left),
+        c2: Math.round(cell2.getBoundingClientRect().left),
+        w1: Math.round(cell1.getBoundingClientRect().width),
+        scrolled: Math.round(scroller.scrollLeft),
+      },
+      subBg: sub ? getComputedStyle(sub).backgroundColor : null,
+      subWeight: sub ? getComputedStyle(sub).fontWeight : null,
+    };
+  });
+  ok(pin.after.scrolled > 300, `matrix scrolled ${pin.after.scrolled}px`);
+  ok(Math.abs(pin.after.c1 - pin.before.panel) <= 2,
+     `first column stays pinned (${pin.after.c1} vs panel ${pin.before.panel})`);
+  ok(Math.abs(pin.after.c2 - (pin.after.c1 + pin.after.w1)) <= 2,
+     `second column stays pinned next to it (${pin.after.c2})`);
+  ok(pin.subBg === 'rgb(233, 245, 239)', `frozen subtotal cell keeps the brand tint (${pin.subBg})`);
+  ok(String(pin.subWeight) === '700', `frozen subtotal cell stays bold (${pin.subWeight})`);
+  await ctx.close();
+}
+
+/* report 1 is a flat list (no rootstock subtotals); report 2 still groups */
 {
   const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/disponibilita');
   const r = await page.evaluate(() => {
     const t = document.querySelector('.grid');
-    const sub = t.querySelector('tbody tr.subtotal');
     const neg = t.querySelector('tbody tr.negative');
-    const subTd = sub && sub.querySelector('td');
+    const total = t.querySelector('tbody tr.total');
+    const td = (row) => (row ? row.querySelector('td') : null);
     return {
+      cols: t.querySelectorAll('thead th').length,
+      groups: t.querySelectorAll('tbody tr.group').length,
       subs: t.querySelectorAll('tbody tr.subtotal').length,
       totals: t.querySelectorAll('tbody tr.total').length,
-      subWeight: subTd ? getComputedStyle(subTd).fontWeight : null,
-      subBg: subTd ? getComputedStyle(subTd).backgroundColor : null,
-      negWeight: neg ? getComputedStyle(neg.querySelector('td')).fontWeight : null,
-      negColor: neg ? getComputedStyle(neg.querySelector('td')).color : null,
-      negCellBg: neg ? getComputedStyle(neg.querySelector('td')).backgroundColor : null,
+      totalWeight: td(total) ? getComputedStyle(td(total)).fontWeight : null,
+      totalBg: td(total) ? getComputedStyle(td(total)).backgroundColor : null,
+      negWeight: neg ? getComputedStyle(td(neg)).fontWeight : null,
+      negColor: neg ? getComputedStyle(td(neg)).color : null,
+      negCellBg: neg ? getComputedStyle(td(neg)).backgroundColor : null,
+      rootstockCells: t.querySelectorAll('tbody tr.trow td[data-label="Portainnesto"]').length,
+      rows: t.querySelectorAll('tbody tr.trow').length,
     };
   });
-  ok(r.subs > 0, 'report: rootstock subtotal rows present');
-  ok(r.totals === 1, 'report: single grand-total row');
-  ok(String(r.subWeight) === '700', `subtotal rows are bold (got ${r.subWeight})`);
-  ok(r.subBg === 'rgb(233, 245, 239)', `subtotal tinted with brand-50 (got ${r.subBg})`);
-  ok(r.negWeight === '700', `negative row is bold (got ${r.negWeight})`);
-  ok(r.negColor === 'rgb(185, 28, 28)', `negative row is danger-700 (got ${r.negColor})`);
-  ok(r.negCellBg === 'rgb(254, 242, 242)', `negative cells tinted danger-50 (got ${r.negCellBg})`);
+  ok(r.cols === 7, `report 1: 7 columns including the rootstock (${r.cols})`);
+  ok(r.groups === 0 && r.subs === 0, `report 1: no grouping and no subtotals (${r.groups}/${r.subs})`);
+  ok(r.totals === 1, `report 1: single grand-total row (${r.totals})`);
+  ok(r.rootstockCells === r.rows, `report 1: every row carries its rootstock (${r.rootstockCells}/${r.rows})`);
+  ok(String(r.totalWeight) === '700', `total row is bold (${r.totalWeight})`);
+  ok(r.totalBg === 'rgb(233, 245, 239)', `total row tinted brand-50 (${r.totalBg})`);
+  ok(r.negWeight === '700' && r.negColor === 'rgb(185, 28, 28)' && r.negCellBg === 'rgb(254, 242, 242)',
+     `negative row keeps the red treatment (${r.negWeight}/${r.negColor}/${r.negCellBg})`);
+  await ctx.close();
+}
+{
+  const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/produttore');
+  const m = await page.evaluate(() => {
+    const t = document.querySelector('.grid');
+    return {
+      groups: t.querySelectorAll('tbody tr.group').length,
+      subs: t.querySelectorAll('tbody tr.subtotal').length,
+      subWeight: (() => {
+        const sub = t.querySelector('tbody tr.subtotal td');
+        return sub ? getComputedStyle(sub).fontWeight : null;
+      })(),
+      subBg: (() => {
+        const sub = t.querySelector('tbody tr.subtotal td');
+        return sub ? getComputedStyle(sub).backgroundColor : null;
+      })(),
+    };
+  });
+  ok(m.groups > 0 && m.subs > 0, `per-grower report still groups by rootstock (${m.groups} groups, ${m.subs} subtotals)`);
+  ok(String(m.subWeight) === '700' && m.subBg === 'rgb(233, 245, 239)',
+     `per-grower subtotals stay bold and tinted (${m.subWeight}/${m.subBg})`);
   await ctx.close();
 }
 
