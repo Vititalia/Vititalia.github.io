@@ -166,6 +166,65 @@ for (const [w, cols] of [[390, 2], [900, 3], [1440, 4]]) {
   await ctx.close();
 }
 
+/* ---------------- scrolling must not be reset by the browser chrome ---------------- */
+{
+  const { page, ctx } = await open({ width: 390, height: 844 }, '#/r/disponibilita');
+  await page.evaluate(() => window.scrollTo(0, 600));
+  await page.waitForTimeout(150);
+  const before = await page.evaluate(() => Math.round(window.scrollY));
+  ok(before > 300, `scrolled down to ${before}`);
+
+  // mobile browsers resize the viewport when the address bar hides/shows while scrolling
+  await page.setViewportSize({ width: 390, height: 724 });
+  await page.waitForTimeout(500);
+  const afterBar = await page.evaluate(() => Math.round(window.scrollY));
+  ok(Math.abs(afterBar - before) < 40,
+     `address-bar resize keeps the scroll position (${before} -> ${afterBar})`);
+
+  // the on-screen keyboard does the same thing
+  await page.setViewportSize({ width: 390, height: 480 });
+  await page.waitForTimeout(500);
+  const afterKb = await page.evaluate(() => Math.round(window.scrollY));
+  ok(Math.abs(afterKb - before) < 40, `keyboard resize keeps the scroll position (${before} -> ${afterKb})`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+
+  // a real navigation still opens at the top
+  await page.evaluate(() => { location.hash = '#/r/indisponibilita'; });
+  await page.waitForTimeout(400);
+  ok(await page.evaluate(() => Math.round(window.scrollY)) < 20, 'a new page still opens at the top');
+
+  await ctx.close();
+}
+
+/* an in-place refresh (ctx.refresh) must not move the reader either — on PC, where
+   the orders list exists */
+{
+  const { page, ctx } = await open({ width: 1440, height: 900 }, '#/dati/ordini');
+  await page.evaluate(() => window.scrollTo(0, 400));
+  await page.waitForTimeout(150);
+  const y1 = await page.evaluate(() => Math.round(window.scrollY));
+  // click a row that is inside the viewport: page.click() would scroll the target
+  // into view first, which would defeat the measurement
+  await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('[data-toggle]')];
+    const filler = rows.find((b) => {
+      const r = b.getBoundingClientRect();
+      return r.top > 100 && r.bottom < window.innerHeight - 80;
+    }) || rows[0];
+    filler.click();
+  });
+  await page.waitForTimeout(450);
+  const y2 = await page.evaluate(() => Math.round(window.scrollY));
+  ok(y1 > 100, `scrolled the orders list to ${y1}`);
+  ok(Math.abs(y2 - y1) < 60, `toggling Spedito keeps the position (${y1} -> ${y2})`);
+  /* and a filter change, which IS a navigation, still goes back to the top */
+  await page.evaluate(() => { location.hash = '#/r/disponibilita?tipologia=Barbatelle%20innestate'; });
+  await page.waitForTimeout(400);
+  ok(await page.evaluate(() => Math.round(window.scrollY)) < 20, 'changing a filter opens at the top of the results');
+  await ctx.close();
+}
+
 /* ---------------------------- breakpoint edges ---------------------------- */
 for (const [w, expect] of [[1024, 'table-row'], [760, 'table-row'], [759, 'block']]) {
   const { page, ctx } = await open({ width: w, height: 900 }, '#/r/disponibilita');

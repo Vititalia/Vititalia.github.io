@@ -80,6 +80,10 @@ phone (four from 640 px), and the recent-lots and shortage panels follow below i
 - **≥1024 px** — sidebar navigation and true data grids: real `table-row`/`table-cell` layout, a
   sticky header row, and a frozen first column. The per-grower matrix (16 columns) scrolls inside its
   own panel, never the page.
+- **No scroll hijacking**: the browser chrome resizing the viewport while you scroll (address bar
+  hiding/showing, on-screen keyboard) never re-renders the page, and an in-place refresh (saving a
+  lot, toggling *Spedito*, typing in a search field) keeps your scroll position. Only a real
+  navigation — new page, filter change, back/forward — opens at the top.
 - **Data entry** requires ≥1024 px; on a phone `#/dati/*` renders an explicit "solo da PC" card
   instead of a half-working form.
 

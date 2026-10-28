@@ -8,6 +8,7 @@ import * as D from './views-data.js';
 
 const BANNER_KEY = 'vignero.demo.dismissed';
 const isDesktop = () => window.matchMedia('(min-width:1024px)').matches;
+const layoutModeNow = () => (isDesktop() ? 'desktop' : 'mobile');
 
 const ROUTES = [
   { re: /^\/login$/, view: R.viewLogin, cap: null, title: 'Accedi', crumb: 'Accesso' },
@@ -28,6 +29,8 @@ let session = null;      // { userId, name, email, role, grower, exp, user }
 let role = null;
 let pendingHash = null;  // route requested before being sent to the login screen
 let current = { path: '/home', params: new URLSearchParams() };
+let lastHash = null;     // to tell a real navigation from a re-render
+let layoutMode = null;   // 'mobile' | 'desktop' — only a *mode* change triggers a re-render
 
 export const currentSession = () => session;
 
@@ -130,6 +133,10 @@ export function render() {
   current = { path, params };
   U.closeSheet();
 
+  const rawHash = location.hash;
+  const navigated = rawHash !== lastHash;
+  lastHash = rawHash;
+
   const route = ROUTES.find((r) => r.re.test(path));
   if (!route) { navigate('#/home'); return; }
 
@@ -169,7 +176,9 @@ export function render() {
     const btn = main.querySelector('[data-empty-action]');
     if (btn) btn.addEventListener('click', () => location.reload());
   }
-  window.scrollTo(0, 0);
+  // A re-render of the same route (refresh after a save, a filter, a layout
+  // change) must never yank the reader back to the top: only a navigation does.
+  if (navigated) window.scrollTo(0, 0);
 }
 
 /* ------------------------------------------------------------------ boot */
@@ -203,7 +212,18 @@ async function boot() {
     else sessionSheet();
   });
 
-  window.addEventListener('resize', U.debounce(() => { paintChrome(); render(); }, 180));
+  layoutMode = layoutModeNow();
+  window.addEventListener('resize', U.debounce(() => {
+    const mode = layoutModeNow();
+    // Mobile browsers fire `resize` every time the address bar hides or shows
+    // while scrolling, and when the keyboard opens. Those are height-only
+    // changes: the layout does not change, so do not re-render (that used to
+    // jump the page back to the top mid-scroll).
+    if (mode === layoutMode) return;
+    layoutMode = mode;
+    paintChrome();
+    render();
+  }, 180));
   window.addEventListener('hashchange', render);
 
   if (!location.hash) location.hash = session ? '#/home' : '#/login';
