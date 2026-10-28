@@ -179,7 +179,8 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 .cap-narrow{display:none}
 .grid th{
   background:var(--canvas);color:var(--ink-900);font-size:11px;font-weight:700;letter-spacing:.3px;
-  text-transform:uppercase;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;
+  text-transform:uppercase;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);
+  white-space:normal;overflow-wrap:anywhere;line-height:14px;vertical-align:bottom;
 }
 .grid th.r{text-align:right}
 .grid td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -307,6 +308,9 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
   body{padding-bottom:0}
   .appbar{padding-left:16px}
   .shell{display:grid;grid-template-columns:240px minmax(0,1fr);align-items:start}
+  /* `margin:0 auto` on a grid item disables stretch and shrinks it to fit-content,
+     which left the tables short of the page edge. Let it fill the column. */
+  main{max-width:none;margin:0;justify-self:stretch;width:auto}
   .rail{
     display:block;position:sticky;top:56px;height:calc(100vh - 56px);overflow:auto;
     background:var(--surface);border-right:1px solid var(--line);padding:12px 8px;

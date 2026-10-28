@@ -80,7 +80,9 @@ phone (four from 640 px), and the recent-lots and shortage panels follow below i
 - **≤759 px** — the data table becomes grouped cards: one card per rootstock with its subtotal in the
   header, one block per clone with a metric strip. No horizontal page scrolling.
 - **≥1024 px** — sidebar navigation and true data grids: real `table-row`/`table-cell` layout, a
-  sticky header row, and a frozen first column. The per-grower matrix (16 columns) scrolls inside its
+  sticky header row, and frozen clone/rootstock columns. The content column and its tables span the
+  **full width** between the sidebar and the page edge (no centred max-width, no empty band), and a
+  table that still cannot fit scrolls inside its own panel instead of being clipped. The per-grower matrix (16 columns) scrolls inside its
   own panel, never the page.
 - **No scroll hijacking**: the browser chrome resizing the viewport while you scroll (address bar
   hiding/showing, on-screen keyboard) never re-renders the page, and an in-place refresh (saving a

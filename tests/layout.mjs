@@ -114,6 +114,41 @@ for (const route of ROUTES) {
   await ctx.close();
 }
 
+/* PC: the content column and every table must fill the page width */
+for (const w of [1024, 1440, 1920]) {
+  const pad = w >= 1440 ? 32 : 24;          // main padding per breakpoint
+  for (const route of ['#/home', '#/r/disponibilita', '#/r/produttore', '#/dati/lotti']) {
+    const { page, ctx } = await open({ width: w, height: 900 }, route);
+    const m = await page.evaluate(() => {
+      const main = document.getElementById('main');
+      const cs = getComputedStyle(main);
+      const rail = document.getElementById('rail');
+      const box = document.querySelector('.report') || document.querySelector('.card');
+      const grid = document.querySelector('.grid');
+      const scroller = grid ? grid.closest('.table-scroll') : null;
+      return {
+        win: window.innerWidth,
+        rail: Math.round(rail.getBoundingClientRect().width),
+        mainW: Math.round(main.getBoundingClientRect().width),
+        inner: Math.round(main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)),
+        boxW: box ? Math.round(box.getBoundingClientRect().width) : null,
+        rightGap: box ? Math.round(window.innerWidth - box.getBoundingClientRect().right) : null,
+        gridW: grid ? Math.round(grid.getBoundingClientRect().width) : null,
+        scrolls: scroller ? scroller.scrollWidth > scroller.clientWidth + 1 : false,
+      };
+    });
+    ok(Math.abs(m.mainW - (m.win - m.rail)) <= 1,
+       `${w}px ${route}: content column fills the width (main ${m.mainW} vs ${m.win - m.rail})`);
+    ok(m.boxW === null || Math.abs(m.boxW - m.inner) <= 2,
+       `${w}px ${route}: the table card spans the content width (${m.boxW}/${m.inner})`);
+    ok(m.rightGap === null || m.rightGap === pad,
+       `${w}px ${route}: no empty band on the right (gap ${m.rightGap}, expected ${pad})`);
+    ok(m.gridW === null || m.gridW <= m.inner + 1 || m.scrolls,
+       `${w}px ${route}: the table fits or scrolls inside (grid ${m.gridW}, inner ${m.inner}, scrolls ${m.scrolls})`);
+    await ctx.close();
+  }
+}
+
 /* the two frozen columns must stay put while the matrix scrolls */
 {
   const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/produttore');
