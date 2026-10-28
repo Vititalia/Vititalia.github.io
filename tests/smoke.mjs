@@ -123,7 +123,7 @@ ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before si
 
 /* ---------------- route matrix ---------------- */
 const CASES = [
-  ['admin', '#/home', ['Disponibilità totale', 'Riepiloghi']],
+  ['admin', '#/home', ['Disponibilità totale', 'Riepiloghi', 'da dove vuoi iniziare']],
   ['admin', '#/r/disponibilita', ['Riepilogo disponibilità', 'Totale portainnesto', 'Da spedire']],
   ['admin', '#/r/produttore', ['Riepilogo per produttore', 'Non attribuito', 'Tot. produttori']],
   ['admin', '#/r/indisponibilita', ['Indisponibilità', 'Deficit']],
@@ -158,6 +158,47 @@ await loginAs('admin');
 let t = await go('#/dati/lotti');
 ok(t.includes('solo da PC'), 'mobile: data entry shows the PC-only gate');
 desktop = true;
+
+/* ---------------- home launcher ---------------- */
+{
+  const expected = {
+    admin: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Lotti magazzino',
+            'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Ruoli e permessi', 'Profilo'],
+    ufficio: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Lotti magazzino',
+              'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Profilo'],
+    produttore: ['Disponibilità', 'Indisponibilità', 'Profilo'],
+    vendite: ['Disponibilità', 'Profilo'],
+  };
+  for (const [role, titles] of Object.entries(expected)) {
+    desktop = true;
+    await loginAs(role);
+    await go('#/home');
+    const tiles = [...document.querySelectorAll('.apptile')];
+    ok(tiles.length === titles.length, `${role}: launcher shows ${titles.length} pages (got ${tiles.length})`);
+    const labels = tiles.map((t) => t.querySelector('b').textContent.trim());
+    ok(titles.every((x) => labels.includes(x)), `${role}: launcher titles ${JSON.stringify(labels)}`);
+    ok(tiles.every((t) => t.getAttribute('href').startsWith('#/')), `${role}: every tile is a link to a page`);
+    ok(tiles.every((t) => t.getAttribute('aria-label')), `${role}: every tile has an accessible name`);
+  }
+  /* the deficit tile carries the count */
+  await loginAs('admin');
+  await go('#/home');
+  const alertTile = [...document.querySelectorAll('.apptile')].find((t) => t.getAttribute('href') === '#/r/indisponibilita');
+  ok(!!alertTile.querySelector('.badge-danger'), 'deficit tile shows a red count badge');
+  /* on a phone the entry tiles announce they are PC-only */
+  desktop = false;
+  await go('#/home');
+  const locked = [...document.querySelectorAll('.apptile.is-locked')];
+  ok(locked.length === 3, `mobile: the 3 entry tiles are marked PC-only (got ${locked.length})`);
+  ok(locked.every((t) => /Solo da PC/.test(t.textContent)), 'mobile: entry tiles say "Solo da PC"');
+  desktop = true;
+  /* tapping a tile opens that page */
+  await go('#/home');
+  document.querySelector('.apptile[href="#/anagrafiche/viti"]').click();
+  await wait(40);
+  ok(window.location.hash === '#/anagrafiche/viti', 'tapping a tile navigates to the page');
+  ok(text().includes('Anagrafica vite'), 'the page opened from the tile renders');
+}
 
 /* filters via URL */
 await loginAs('admin');

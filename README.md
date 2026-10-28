@@ -47,7 +47,7 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 | Route | Screen | Notes |
 |---|---|---|
 | `#/login` | Accedi | email + password, one account per profile, session of 8 h |
-| `#/home` | Panoramica | 4 KPIs, recent lots, top shortages, report shortcuts |
+| `#/home` | Panoramica | launcher: one tile per page the role can open | 4 KPIs, recent lots, top shortages, report shortcuts |
 | `#/r/disponibilita` | Riepilogo disponibilità | grouped by rootstock, **Totale portainnesto** subtotals, negative rows bold red |
 | `#/r/produttore` | Riepilogo per produttore | 16 columns: 8 growers + *Non attribuito* + total, frozen first columns |
 | `#/r/indisponibilita` | Indisponibilità | deficit only, sorted varietà → portainnesto → clone |
@@ -61,6 +61,17 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 
 Filters (Tipologia, Produzione, searchable Codice varietà) are single-select and live **in the URL**,
 so a filtered report can be shared or refreshed.
+
+### Home as a launcher
+
+Home is built as an app-style launcher rather than a dashboard dump: the pages you can open are
+grouped (*Riepiloghi · Dati · Anagrafiche · Sistema*) and each is a large tile with an icon, a one-line
+description and, where useful, a badge (shortage count on *Indisponibilità*, open orders on
+*Ordini*). Tiles are filtered by the signed-in role, so the screen shows exactly the pages that exist
+for you — 10 for Amministratore, 9 for Amministrazione, 3 for Produttore, 2 for Vendite. On a phone the
+data-entry tiles stay visible but are marked **Solo da PC** (dashed border, lock icon) and open the
+explanatory gate, so the map of the app is never a lie. Two compact KPIs sit above the launcher on a
+phone (four from 640 px), and the recent-lots and shortage panels follow below it.
 
 ### Responsive behaviour
 

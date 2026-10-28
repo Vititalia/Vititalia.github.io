@@ -97,58 +97,104 @@ export function viewLogin(root, ctx) {
 }
 
 /* -------------------------------------------------------------- S-02 home */
+/** The mobile-first launcher: one big tile per page the role can open. */
+function launcherGroups(s, role, isPC) {
+  const groups = [
+    { title: 'Riepiloghi', items: [
+      { cap: 'r.disponibilita', href: '#/r/disponibilita', icon: 'chart',
+        title: 'Disponibilità', sub: 'Magazzino, ordinato, spedito' },
+      { cap: 'r.produttore', href: '#/r/produttore', icon: 'users',
+        title: 'Per produttore', sub: 'Le colonne dei soci' },
+      { cap: 'r.indisponibilita', href: '#/r/indisponibilita', icon: 'alert',
+        title: 'Indisponibilità', sub: 'Solo i deficit', badge: s.negativeCount, badgeTone: 'danger' },
+    ] },
+    { title: 'Dati', items: [
+      { cap: 'dati.lotti', href: '#/dati/lotti', icon: 'edit',
+        title: 'Lotti magazzino', sub: 'Registra i conferimenti', pcOnly: true },
+      { cap: 'dati.ordini', href: '#/dati/ordini', icon: 'truck',
+        title: 'Ordini e impegni', sub: 'Spedito con undo', pcOnly: true, badge: s.ordiniNonSpediti },
+      { cap: 'dati.import', href: '#/dati/import', icon: 'upload',
+        title: 'Import CSV', sub: 'Valida e poi carica', pcOnly: true },
+    ] },
+    { title: 'Anagrafiche', items: [
+      { cap: 'anag.viti', href: '#/anagrafiche/viti', icon: 'leaf',
+        title: 'Vite', sub: 'Varietà e cloni' },
+      { cap: 'anag.portainnesti', href: '#/anagrafiche/portainnesti', icon: 'layers',
+        title: 'Portainnesti', sub: 'Codici di innesto' },
+    ] },
+    { title: 'Sistema', items: [
+      { cap: 'config.permessi', href: '#/config/permessi', icon: 'lock',
+        title: 'Ruoli e permessi', sub: 'Chi vede cosa' },
+      { cap: 'profilo', href: '#/profilo', icon: 'user',
+        title: 'Profilo', sub: 'Sessione e uscita' },
+    ] },
+  ];
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => P.can(role, i.cap)) }))
+    .filter((g) => g.items.length)
+    .map((g) => ({
+      ...g,
+      items: g.items.map((i) => (i.pcOnly && !isPC ? { ...i, sub: 'Solo da PC · si apre sul computer', locked: true } : i)),
+    }));
+}
+
 export function viewHome(root, ctx) {
   const s = S.summary();
+  const isPC = !!(window.matchMedia && window.matchMedia('(min-width:1024px)').matches);
   const neg = s.negativeCount;
-  const tiles = [
-    P.can(ctx.role, 'r.disponibilita') && { href: '#/r/disponibilita', title: 'Riepilogo disponibilità', sub: 'Magazzino, ordinato, di cui spedito, disponibilità.' },
-    P.can(ctx.role, 'r.produttore') && { href: '#/r/produttore', title: 'Riepilogo per produttore', sub: 'Le stesse quantità divise nelle 8 colonne dei produttori.' },
-    P.can(ctx.role, 'r.indisponibilita') && { href: '#/r/indisponibilita', title: 'Indisponibilità', sub: 'Solo le combinazioni con disponibilità negativa.' },
-  ].filter(Boolean);
+  const groups = launcherGroups(s, ctx.role, isPC);
+  const tileCount = groups.reduce((n, g) => n + g.items.length, 0);
 
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Panoramica</p>
-      <h1>Disponibilità di magazzino</h1>
-      <p class="sub">${ctx.user ? U.esc(ctx.user.name) + ' · ' : ''}${U.esc(P.roleLabel(ctx.role))} ·
+      <h1>${ctx.user ? U.esc(ctx.user.name.split(' ')[0]) + ', ' : ''}da dove vuoi iniziare?</h1>
+      <p class="sub">${U.esc(P.roleLabel(ctx.role))} · ${tileCount} sezioni disponibili ·
         ${s.lotti} lotti · ${s.ordiniNonSpediti} impegni non spediti</p>
     </div></div>
 
-    <div class="kpis">
+    <div class="kpis kpis-compact">
       <button class="kpi" type="button" data-go="#/r/disponibilita">
         <span class="k-label">Disponibilità totale</span>
         <span class="k-value">${U.fmtSigned(s.disponibilita)}</span>
-        <span class="k-sub">giacenza ${U.fmtQty(s.giacenza)} · ordinato ${U.fmtQty(s.ordinato)}</span>
+        <span class="k-sub">giacenza ${U.fmtQty(s.giacenza)}</span>
       </button>
-      <button class="kpi ${neg ? 'tone-danger' : 'tone-ok'}" type="button" ${P.can(ctx.role, 'r.indisponibilita') ? 'data-go="#/r/indisponibilita"' : 'data-go="#/r/disponibilita"'}>
+      <button class="kpi ${neg ? 'tone-danger' : 'tone-ok'}" type="button"
+              ${P.can(ctx.role, 'r.indisponibilita') ? 'data-go="#/r/indisponibilita"' : 'data-go="#/r/disponibilita"'}>
         <span class="k-label">In indisponibilità</span>
         <span class="k-value">${neg}</span>
         <span class="k-sub">${neg ? 'combinazioni in deficit' : 'nessun deficit'}</span>
       </button>
-      <button class="kpi" type="button" ${P.can(ctx.role, 'dati.lotti') ? 'data-go="#/dati/lotti"' : 'data-go="#/r/disponibilita"'}>
+      <button class="kpi hide-sm" type="button" ${P.can(ctx.role, 'dati.lotti') ? 'data-go="#/dati/lotti"' : 'data-go="#/r/disponibilita"'}>
         <span class="k-label">Lotti registrati</span>
         <span class="k-value">${U.fmtQty(s.lotti)}</span>
         <span class="k-sub">anno di conferimento</span>
       </button>
-      <button class="kpi" type="button" ${P.can(ctx.role, 'dati.ordini') ? 'data-go="#/dati/ordini"' : 'data-go="#/r/disponibilita"'}>
+      <button class="kpi hide-sm" type="button" ${P.can(ctx.role, 'dati.ordini') ? 'data-go="#/dati/ordini"' : 'data-go="#/r/disponibilita"'}>
         <span class="k-label">Da spedire</span>
         <span class="k-value">${U.fmtQty(s.daSpedire)}</span>
         <span class="k-sub">${s.ordiniNonSpediti} impegni aperti</span>
       </button>
     </div>
 
-    <div class="stack">
-      <section>
-        <h2 class="eyebrow" style="margin-bottom:8px">Riepiloghi</h2>
-        <div class="tile-list">
-          ${tiles.map((t) => `
-            <a class="tile" href="${t.href}">
-              <span><span class="t-title">${U.esc(t.title)}</span><span class="t-sub">${U.esc(t.sub)}</span></span>
-              <span class="t-go" aria-hidden="true">›</span>
-            </a>`).join('')}
-        </div>
-      </section>
+    <nav class="launcher" aria-label="Sezioni dell'applicazione">
+      ${groups.map((g) => `
+        <div class="launcher-group">
+          <h2 class="eyebrow">${U.esc(g.title)}</h2>
+          <div class="launcher-grid">
+            ${g.items.map((i) => `
+              <a class="apptile${i.locked ? ' is-locked' : ''}" href="${i.href}"
+                 aria-label="${U.esc(i.title)} — ${U.esc(i.sub)}">
+                <span class="ai">${U.icon(i.locked ? 'lock' : i.icon)}</span>
+                <b>${U.esc(i.title)}</b>
+                <span>${U.esc(i.sub)}</span>
+                ${i.badge ? `<span class="badge ${i.badgeTone === 'danger' ? 'badge-danger' : ''}">${U.fmtQty(i.badge)}</span>` : ''}
+              </a>`).join('')}
+          </div>
+        </div>`).join('')}
+    </nav>
 
+    <div class="stack mt">
       <section class="card">
         <div class="card-pad" style="border-bottom:1px solid var(--line)">
           <div class="row-between">
@@ -186,17 +232,9 @@ export function viewHome(root, ctx) {
               <b class="num" style="color:var(--danger)">\u2212${U.fmtQty(r.deficit)}</b>
             </li>`).join('')}
         </ul>` : `<p class="card-pad caption">Nessuna indisponibilità: magazzino ≥ ordinato su tutte le combinazioni.</p>`}
-      </section>` : ''}
-
-      ${!P.can(ctx.role, 'dati.lotti') ? `
-      <section class="card card-pad">
-        <p class="caption">Profilo ${U.esc(P.roleLabel(ctx.role))}: consultazione. L'inserimento dati è riservato ad Amministratore e Amministrazione, da PC.</p>
       </section>` : `
       <section class="card card-pad">
-        <div class="row-between">
-          <p class="caption">Inserimento dati disponibile solo da PC (≥1024 dp): lotti, impegni e import.</p>
-          <a class="btn btn-secondary btn-sm" href="#/dati/lotti">Apri dati</a>
-        </div>
+        <p class="caption">Profilo ${U.esc(P.roleLabel(ctx.role))}: consultazione. L'inserimento dati è riservato ad Amministratore e Amministrazione, da PC.</p>
       </section>`}
     </div>`;
 

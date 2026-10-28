@@ -9,15 +9,6 @@ import * as D from './views-data.js';
 const BANNER_KEY = 'vignero.demo.dismissed';
 const isDesktop = () => window.matchMedia('(min-width:1024px)').matches;
 
-const ICONS = {
-  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
-  table: '<path d="M3 5h18v14H3z"/><path d="M3 10h18M9 10v9"/>',
-  alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9v5M12 17h.01"/>',
-  edit: '<path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M14 6l4 4"/>',
-  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
-};
-const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
-
 const ROUTES = [
   { re: /^\/login$/, view: R.viewLogin, cap: null, title: 'Accedi', crumb: 'Accesso' },
   { re: /^\/home$/, view: R.viewHome, cap: 'home', title: 'Panoramica', crumb: 'Fede Magazzino' },
@@ -122,7 +113,7 @@ function paintChrome() {
     }).join('')}`;
 
   tabbar.innerHTML = P.tabsFor(role).map((t) =>
-    `<a href="${t.href}" data-nav="${t.href}">${icon(t.icon)}<span>${U.esc(t.label)}</span></a>`).join('');
+    `<a href="${t.href}" data-nav="${t.href}">${U.icon(t.icon)}<span>${U.esc(t.label)}</span></a>`).join('');
 }
 
 function setActiveNav() {

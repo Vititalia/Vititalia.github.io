@@ -1,5 +1,23 @@
 /* Vignero · ui.js — formatting, responsive table builder, sheets, combobox */
 
+const ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+  table: '<path d="M3 5h18v14H3z"/><path d="M3 10h18M9 10v9"/>',
+  chart: '<path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/>',
+  alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9v5M12 17h.01"/>',
+  users: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.3 2.9-5.2 6.5-5.2s6.5 1.9 6.5 5.2"/><path d="M16 5.4a3 3 0 0 1 0 5.6M18 14.6c2.1.6 3.5 2.2 3.5 5.4"/>',
+  edit: '<path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M14 6l4 4"/>',
+  truck: '<path d="M2 7h11v9H2z"/><path d="M13 10h4l4 3.5V16h-8z"/><circle cx="6" cy="18.5" r="1.8"/><circle cx="17" cy="18.5" r="1.8"/>',
+  upload: '<path d="M12 16V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M4 16v3.5h16V16"/>',
+  leaf: '<path d="M20 4c-8 0-14 3.4-14 9.5A6.5 6.5 0 0 0 12.5 20C18 20 20 13 20 4z"/><path d="M10 20c1.2-4.4 3.6-7.6 7-9.6"/>',
+  layers: '<path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  lock: '<rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7.2a4 4 0 0 1 8 0V10"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
+};
+export function icon(name, cls) {
+  return `<svg${cls ? ` class="${cls}"` : ''} viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+}
+
 const nf = new Intl.NumberFormat('it-IT');
 const df = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
 

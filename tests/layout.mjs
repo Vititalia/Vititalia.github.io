@@ -142,6 +142,30 @@ for (const route of ROUTES) {
   await ctx.close();
 }
 
+/* ------------------------------- launcher -------------------------------- */
+for (const [w, cols] of [[390, 2], [900, 3], [1440, 4]]) {
+  const { page, ctx } = await open({ width: w, height: 900 }, '#/home');
+  const d = await page.evaluate(() => {
+    const grid = document.querySelector('.launcher-grid');
+    const tiles = [...document.querySelectorAll('.apptile')];
+    const g = getComputedStyle(grid);
+    const rects = tiles.map((t) => t.getBoundingClientRect());
+    return {
+      columns: g.gridTemplateColumns.split(' ').length,
+      tiles: tiles.length,
+      minH: Math.min(...rects.map((r) => Math.round(r.height))),
+      minW: Math.min(...rects.map((r) => Math.round(r.width))),
+      docScroll: document.documentElement.scrollWidth, win: window.innerWidth,
+    };
+  });
+  ok(d.columns === cols, `${w}px: launcher has ${cols} columns (got ${d.columns})`);
+  ok(d.tiles >= 8, `${w}px: launcher shows ${d.tiles} tiles`);
+  ok(d.minH >= 44, `${w}px: every tile is at least 44px tall (min ${d.minH})`);
+  ok(d.minW >= 44, `${w}px: every tile is at least 44px wide (min ${d.minW})`);
+  ok(d.docScroll <= d.win + 1, `${w}px: launcher does not overflow horizontally`);
+  await ctx.close();
+}
+
 /* ---------------------------- breakpoint edges ---------------------------- */
 for (const [w, expect] of [[1024, 'table-row'], [760, 'table-row'], [759, 'block']]) {
   const { page, ctx } = await open({ width: w, height: 900 }, '#/r/disponibilita');
