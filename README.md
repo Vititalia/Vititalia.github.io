@@ -110,11 +110,16 @@ No build step, no framework, no backend: static files + `fetch` of one JSON snap
 
 ## Deploy
 
-GitHub Pages serves the repository root of `main`. Changes go live on push:
+GitHub Pages serves the **`gh-pages`** branch (root). `main` is the development branch, so publishing
+is two commands:
 
 ```bash
-git push origin main
+git push origin main            # development branch
+git push origin main:gh-pages   # publish to the live site (~1 min build)
 ```
+
+The site is a plain static bundle, so no build step or CI is required (and the repository token used
+here cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
 
 ## Known limitations / next steps
 
