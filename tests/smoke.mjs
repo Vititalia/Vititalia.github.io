@@ -246,6 +246,39 @@ desktop = true;
   ok(document.querySelectorAll('.chip').length === 1, 'the active rootstock is shown as a chip');
 }
 
+/* ---------------- per produttore: flat list, two more filters ---------------- */
+{
+  await loginAs('admin');
+  await go('#/r/produttore');
+  const shape = {
+    groups: document.querySelectorAll('.grid tbody tr.group').length,
+    subs: document.querySelectorAll('.grid tbody tr.subtotal').length,
+    totals: document.querySelectorAll('.grid tbody tr.total').length,
+    cols: document.querySelectorAll('.grid thead th').length,
+    filters: [...document.querySelectorAll('#filterHost .field > span')].map((x) => x.textContent.trim()),
+  };
+  ok(shape.groups === 0 && shape.subs === 0, `per produttore: no grouping (${shape.groups}/${shape.subs})`);
+  ok(shape.totals === 1, `per produttore: one grand total (${shape.totals})`);
+  ok(shape.cols === 16, `per produttore: 16 columns (${shape.cols})`);
+  ok(shape.filters.includes('Codice portainnesto'), `per produttore: rootstock filter (${JSON.stringify(shape.filters)})`);
+  ok(shape.filters.includes('Produttore'), `per produttore: grower filter (${JSON.stringify(shape.filters)})`);
+
+  const totalRows = document.querySelectorAll('.grid tbody tr.trow').length;
+  await go('#/r/produttore?produttore=Mori%20Marco');
+  const filtered = {
+    rows: document.querySelectorAll('.grid tbody tr.trow').length,
+    chip: [...document.querySelectorAll('.chip')].map((c) => c.textContent.trim()).join(' | '),
+    hl: [...document.querySelectorAll('.grid thead th.grower-hl')].map((t) => t.textContent.trim()),
+    hlCells: document.querySelectorAll('.grid tbody tr.trow td.grower-hl').length,
+    hlTotal: document.querySelectorAll('.grid tbody tr.total td.grower-hl').length,
+  };
+  ok(filtered.rows > 0 && filtered.rows < totalRows, `grower filter narrows the list (${filtered.rows} < ${totalRows})`);
+  ok(/Produttore: Mori Marco/.test(filtered.chip), `grower filter chip shown (${filtered.chip})`);
+  ok(filtered.hl.length === 1 && filtered.hl[0] === 'Mori Marco', `the filtered column is highlighted (${filtered.hl})`);
+  ok(filtered.hlCells === filtered.rows, `every row highlights that column (${filtered.hlCells}/${filtered.rows})`);
+  ok(filtered.hlTotal === 1, `the total row highlights it too (${filtered.hlTotal})`);
+}
+
 /* filters via URL */
 await loginAs('admin');
 const variety = JSON.parse(SNAP).lotti[0][4];

@@ -53,17 +53,36 @@ ok(r1.rows.every((r, i) => i === 0 ||
 
 /* ---------- report 2 ---------- */
 const r2 = reportPerProduttore({});
+ok(Array.isArray(r2.rows) && r2.rows.length > 0, 'report 2 returns a flat list');
+ok(r2.groups === undefined, 'report 2 is no longer grouped by rootstock');
 let r2rows = 0;
-for (const g of r2.groups) {
-  for (const r of g.rows) {
-    r2rows++;
-    const sumG = r2.growers.reduce((s, n) => s + r.per[n], 0) + r.nonAttr + r.extra;
-    near(sumG, r.totaleProduttori, 'grower columns sum to Tot. produttori');
-    near(r.totaleProduttori, r.disponibilita, 'Tot. produttori = disponibilità');
-  }
+for (const r of r2.rows) {
+  r2rows++;
+  const sumG = r2.growers.reduce((s2, n) => s2 + r.per[n], 0) + r.nonAttr + r.extra;
+  near(sumG, r.totaleProduttori, 'grower columns sum to Tot. produttori');
+  near(r.totaleProduttori, r.disponibilita, 'Tot. produttori = disponibilità');
+  near(r.daSpedire, r.ord - r.sped, 'report 2: daSpedire = ordinato - spedito');
 }
-near(r2rows, rows, 'report 2 covers the same keys as report 1');
+near(r2rows, r1.rows.length, 'report 2 covers the same keys as report 1');
 near(r2.totals.totaleProduttori, r1.totals.disponibilita, 'report 2 grand total = report 1 total');
+near(r2.rowCount, r2rows, 'report 2 rowCount matches the rows');
+ok(r2.rows.every((r, i) => i === 0 ||
+   C.compare(r2.rows[i - 1].portainnesto, r.portainnesto) < 0 ||
+   (r2.rows[i - 1].portainnesto === r.portainnesto &&
+    C.compare(r2.rows[i - 1].clone, r.clone) <= 0)),
+   'report 2 sorted by rootstock then clone');
+
+/* grower filter: keeps only the combinations that involve that grower, and must
+   not change that grower's own column total */
+const grower = store.meta.produttori.find((g) => store.lotti.some((l) => l.produttore === g));
+const rf = reportPerProduttore({ produttore: grower });
+ok(rf.rows.length > 0, `grower filter returns rows (${grower})`);
+ok(rf.rowCount <= r2.rowCount, 'grower filter cannot add rows');
+near(rf.totals.per[grower], r2.totals.per[grower], "the grower's column total is unchanged by filtering");
+ok(rf.totals.mag <= r2.totals.mag, 'filtering narrows the warehouse total');
+const root2 = store.index.rootstocks.find((c) => store.lotti.some((l) => l.portainnesto === c));
+const rf2 = reportPerProduttore({ produttore: grower, portainnesto: root2 });
+ok(rf2.rows.every((r) => r.portainnesto === root2), 'grower + rootstock filters combine');
 
 /* ---------- report 3 ---------- */
 const r3 = reportIndisponibilita({});

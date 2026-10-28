@@ -2,7 +2,7 @@
 import * as S from './store.js';
 import * as U from './ui.js';
 
-export const EMPTY = { tipologia: '', produzione: '', varieta: '', portainnesto: '' };
+export const EMPTY = { tipologia: '', produzione: '', varieta: '', portainnesto: '', produttore: '' };
 
 export function parseFilters(params) {
   return {
@@ -10,12 +10,13 @@ export function parseFilters(params) {
     produzione: params.get('produzione') || '',
     varieta: params.get('varieta') || '',
     portainnesto: params.get('portainnesto') || '',
+    produttore: params.get('produttore') || '',
   };
 }
 
 export function serializeFilters(f) {
   const p = new URLSearchParams();
-  for (const k of ['tipologia', 'produzione', 'varieta', 'portainnesto']) if (f[k]) p.set(k, f[k]);
+  for (const k of ['tipologia', 'produzione', 'varieta', 'portainnesto', 'produttore']) if (f[k]) p.set(k, f[k]);
   const s = p.toString();
   return s ? '?' + s : '';
 }
@@ -26,6 +27,7 @@ export function activeChips(f) {
   if (f.produzione) out.push({ key: 'produzione', label: 'Produzione: ' + f.produzione });
   if (f.varieta) out.push({ key: 'varieta', label: 'Varietà: ' + f.varieta });
   if (f.portainnesto) out.push({ key: 'portainnesto', label: 'Portainnesto: ' + f.portainnesto });
+  if (f.produttore) out.push({ key: 'produttore', label: 'Produttore: ' + f.produttore });
   return out;
 }
 
@@ -36,6 +38,7 @@ export function activeChips(f) {
 export function filterBar(host, filters, onChange, opts = {}) {
   const showVarieta = opts.showVarieta !== false;
   const showPortainnesto = opts.showPortainnesto === true;
+  const showProduttore = opts.showProduttore === true;
   const tid = 'f-tip-' + Math.random().toString(36).slice(2, 7);
   const pid = 'f-prod-' + Math.random().toString(36).slice(2, 7);
 
@@ -65,6 +68,14 @@ export function filterBar(host, filters, onChange, opts = {}) {
         <span>Codice portainnesto</span>
         <div id="${tid}-root"></div>
       </div>
+      <label class="field" style="margin:0" ${showProduttore ? '' : 'hidden'}>
+        <span>Produttore</span>
+        <select data-filter="produttore">
+          <option value="">Tutti</option>
+          ${S.store.meta.produttori.map((g) =>
+            `<option value="${U.esc(g)}"${filters.produttore === g ? ' selected' : ''}>${U.esc(g)}</option>`).join('')}
+        </select>
+      </label>
       <div class="filter-actions">
         <button class="btn btn-secondary" type="button" data-reset>Azzera</button>
       </div>
@@ -100,7 +111,8 @@ export function filterBar(host, filters, onChange, opts = {}) {
   }
 
   host.querySelector('[data-reset]').addEventListener('click', () => {
-    if (!filters.tipologia && !filters.produzione && !filters.varieta && !filters.portainnesto) return;
+    if (!filters.tipologia && !filters.produzione && !filters.varieta &&
+        !filters.portainnesto && !filters.produttore) return;
     onChange({ ...EMPTY });
   });
 

@@ -49,7 +49,7 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 | `#/login` | Accedi | email + password, one account per profile, session of 8 h; **signing in always opens Home** |
 | `#/home` | Panoramica | launcher: one tile per page the role can open | 4 KPIs, recent lots, top shortages, report shortcuts |
 | `#/r/disponibilita` | Riepilogo disponibilità | **flat list** — rootstock is a column and a filter; single grand total; negative rows bold red |
-| `#/r/produttore` | Riepilogo per produttore | grouped by rootstock with **Totale portainnesto** subtotals; 16 columns: 8 growers + *Non attribuito* + total; clone and rootstock columns frozen |
+| `#/r/produttore` | Riepilogo per produttore | **flat list**, 16 columns (8 growers + *Non attribuito* + total); filters include **Portainnesto** and **Produttore** (highlights that column); clone and rootstock columns frozen |
 | `#/r/indisponibilita` | Indisponibilità | deficit only, sorted varietà → portainnesto → clone |
 | `#/dati/lotti` | Lotti magazzino | entry form with dependent variety → clone select |
 | `#/dati/ordini` | Ordini e impegni | inline *Spedito* toggle with undo, lot picker prefills dimensions |
@@ -60,8 +60,9 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 | `#/profilo` | Profilo | session + logout, reset local edits, demo accounts |
 
 Filters are single-select and live **in the URL**, so a filtered report can be shared or refreshed:
-Tipologia, Produzione and searchable Codice varietà everywhere, plus **Codice portainnesto** on the
-availability report (where the rootstock is a filter rather than a grouping level).
+Tipologia, Produzione and searchable Codice varietà everywhere; **Codice portainnesto** on both report
+(the rootstock is a filter, not a grouping level); and **Produttore** on the per-grower report, which
+keeps only the combinations involving that grower and highlights their column.
 
 ### Home as a launcher
 

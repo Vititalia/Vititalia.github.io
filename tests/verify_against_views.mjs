@@ -59,7 +59,7 @@ for (const [varieta, clone, root, tipo, prodn, qmag, qimp, qeff] of negView) {
 /* ---- Report 2 internal consistency ---- */
 const r2 = reportPerProduttore({});
 let reconcile = 0;
-for (const g of r2.groups) for (const row of g.rows) {
+for (const row of r2.rows) {
   const sumG = r2.growers.reduce((s, n) => s + row.per[n], 0) + row.nonAttr + row.extra;
   eq(sumG, row.totaleProduttori, `tot. produttori ${row.clone}`);
   eq(row.totaleProduttori, row.disponibilita, `tot. prod. == disponibilità ${row.clone}`);

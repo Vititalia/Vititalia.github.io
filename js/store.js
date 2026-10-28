@@ -207,54 +207,52 @@ export function reportDisponibilita(filters) {
   return { rows, totals, negativeCount, rowCount: rows.length };
 }
 
-/** Report 2 — availability split across the 8 growers, plus unattributed. */
+/**
+ * Report 2 — availability split across the 8 growers, plus unattributed.
+ * Flat list like Report 1: the rootstock is a filter, not a grouping level.
+ * `filters.produttore` keeps only the combinations that involve that grower
+ * (a warehouse quantity or a commitment attributed to them).
+ */
 export function reportPerProduttore(filters, growerList) {
-  const m = metrics(filters);
+  const f = filters || {};
+  const m = metrics(f);
   const C = collator();
   const growers = growerList || store.meta.produttori;
-  const groups = new Map();
+
+  const rows = [];
   for (const e of m.values()) {
-    if (!groups.has(e.portainnesto)) {
-      groups.set(e.portainnesto, { portainnesto: e.portainnesto, rows: [], sub: null });
+    if (f.produttore) {
+      const mag = e.growerMag[f.produttore] || 0;
+      const ord = e.growerOrd[f.produttore] || 0;
+      if (!mag && !ord) continue;          // this grower has nothing in this combination
     }
     const per = {};
     for (const g of growers) per[g] = (e.growerMag[g] || 0) - (e.growerOrd[g] || 0);
     const extra = (e.growerMag[NON_RICONOSCIUTO] || 0) - (e.growerOrd[NON_RICONOSCIUTO] || 0);
     const nonAttr = (e.growerMag[NON_ATTRIBUITO] || 0) - (e.growerOrd[NON_ATTRIBUITO] || 0);
-    const totaleProduttori = growers.reduce((s, g) => s + per[g], 0) + extra + nonAttr;
-    groups.get(e.portainnesto).rows.push({
-      ...e, per, extra, nonAttr, totaleProduttori,
-    });
+    const totaleProduttori = growers.reduce((s2, g) => s2 + per[g], 0) + extra + nonAttr;
+    rows.push({ ...e, per, extra, nonAttr, totaleProduttori });
   }
-  const out = [...groups.values()].sort((a, b) => C.compare(a.portainnesto, b.portainnesto));
-  const blankSub = () => {
-    const s = { mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0, per: {},
-                extra: 0, nonAttr: 0, totaleProduttori: 0 };
-    for (const g of growers) s.per[g] = 0;
-    return s;
-  };
-  for (const g of out) {
-    g.rows.sort((a, b) => C.compare(a.clone, b.clone) || C.compare(a.varieta, b.varieta));
-    g.sub = blankSub();
-    for (const r of g.rows) {
-      g.sub.mag += r.mag; g.sub.ord += r.ord; g.sub.sped += r.sped;
-      g.sub.daSpedire += r.daSpedire; g.sub.disponibilita += r.disponibilita;
-      g.sub.extra += r.extra; g.sub.nonAttr += r.nonAttr;
-      g.sub.totaleProduttori += r.totaleProduttori;
-      for (const gr of growers) g.sub.per[gr] += r.per[gr];
-    }
+
+  rows.sort((a, b) =>
+    C.compare(a.portainnesto, b.portainnesto) ||
+    C.compare(a.clone, b.clone) ||
+    C.compare(a.varieta, b.varieta));
+
+  const totals = { mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0,
+                   per: {}, extra: 0, nonAttr: 0, totaleProduttori: 0 };
+  for (const g of growers) totals.per[g] = 0;
+  for (const r of rows) {
+    totals.mag += r.mag; totals.ord += r.ord; totals.sped += r.sped;
+    totals.daSpedire += r.daSpedire; totals.disponibilita += r.disponibilita;
+    totals.extra += r.extra; totals.nonAttr += r.nonAttr;
+    totals.totaleProduttori += r.totaleProduttori;
+    for (const gr of growers) totals.per[gr] += r.per[gr];
   }
-  const totals = blankSub();
-  for (const g of out) {
-    totals.mag += g.sub.mag; totals.ord += g.sub.ord; totals.sped += g.sub.sped;
-    totals.daSpedire += g.sub.daSpedire; totals.disponibilita += g.sub.disponibilita;
-    totals.extra += g.sub.extra; totals.nonAttr += g.sub.nonAttr;
-    totals.totaleProduttori += g.sub.totaleProduttori;
-    for (const gr of growers) totals.per[gr] += g.sub.per[gr];
-  }
-  const negativeCount = out.reduce((n, g) =>
-    n + g.rows.filter((r) => r.disponibilita < 0 || growers.some((x) => r.per[x] < 0)).length, 0);
-  return { groups: out, totals, growers, negativeCount };
+
+  const negativeCount = rows.filter((r) =>
+    r.disponibilita < 0 || r.nonAttr < 0 || growers.some((x) => r.per[x] < 0)).length;
+  return { rows, totals, growers, negativeCount, rowCount: rows.length };
 }
 
 /** Report 3 — shortages only, sorted varietà → portainnesto → clone. */

@@ -296,11 +296,13 @@ Null-dimension handling
 | Aspect | Specification |
 |---|---|
 | Split basis | Warehouse quantities split by `lotti_magazzino.produttore` (canonical 8 + **"Non attribuito"** + **"Non riconosciuto"**) |
-| Ordered quantities | An order is attributed to a grower **through `id_magazzino → lotti.produttore`**. Orders with `id_magazzino IS NULL` cannot be attributed and are shown in a distinct **"Ordini non attribuiti"** row at the bottom of each rootstock group — never silently spread across growers |
+| Ordered quantities | An order is attributed to a grower **through `id_magazzino → lotti.produttore`**. Orders with `id_magazzino IS NULL` cannot be attributed and land in the **"Non attribuito"** column, never silently spread across growers |
+| Filters | As Report 1 (Tipologia, Produzione, Codice varietà, **Codice portainnesto**) **plus Produttore**. Choosing a grower keeps only the combinations that involve them (a warehouse quantity or a committed quantity) and highlights that column; their column total does not change, since filtered-out rows contributed zero |
+| Layout | **Flat list**, one row per combination — no rootstock grouping and no per-rootstock subtotals (PD-2, §15.3) |
 | Columns | Codice clone · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità · 8 grower columns · **Non attribuito** · Totale produttori |
 | Columns total | 6 + 8 + 1 + 1 = **16** |
 | Sort | by rootstock, then clone (as Report 1) |
-| Subtotals | per rootstock across **every** column |
+| Totals | one **"Totale generale"** row summing every column |
 | Self-check | "Totale produttori" must equal the grower columns sum; a mismatch (possible only from unattributed orders) is shown as a reconciliation note with the amount |
 
 **Report 3 — Indisponibilità** (Admin, Amministrazione, Produttore)
@@ -398,7 +400,7 @@ Rules that apply at every breakpoint
 
 - R-1 The filter bar is **always visible above the table**, never behind a menu (requirement: "Filters at the top").
 - R-2 Active filters are shown as removable chips; a `Rimuovi filtri` reset is always present when any filter is active.
-- R-3 Where a rootstock subtotal exists (Report 2 only) it keeps the exact label **"Totale portainnesto"** + rootstock code in every layout.
+- R-3 No report groups by rootstock any more (PD-1, PD-2): both tables are flat lists with a single "Totale generale" row, and the rootstock is a filter.
 - R-4 The red-negative treatment is identical in all layouts: bold + red text + icon + left border.
 - R-5 Horizontal scrolling is forbidden on the page; only inside a data table (`md`+ per-grower report).
 - R-6 Pinch-to-zoom is disabled in the app shell (`user-scalable=no`) because the layouts are already at readable scale — the grid at `md`+ has its own zoom control.
@@ -428,7 +430,7 @@ Below that:
 
 1. **The number is the interface.** These screens exist to show quantities. Chrome is quiet, numbers are large, aligned and tabular.
 2. **Red means oversold.** Red is reserved exclusively for negative availability and destructive actions. It is never decorative, never used for "warning" or branding.
-3. **A subtotal is a promise.** Where a level of aggregation exists (the per-grower report) its "Totale portainnesto" row is visually unmistakable — bold + tint in every layout — so no one sums the wrong column by accident. Report 1 has no subtotals at all: its only aggregate is the grand total.
+3. **Filters beat folding.** The rootstock is a filter in both reports, not a grouping level: isolating one rootstock is a single choice, not a scroll to the right section. The only aggregate a table carries is its grand total, and it is unmistakable — bold on a tinted row in every layout.
 4. **Filter first, then read.** Filters sit at the top, are single-select, and never hide the current result while they load (stale-while-revalidate with a subtle dim).
 5. **Never let a phone pretend to be a workstation.** Editing on a phone is refused explicitly, not approximated.
 6. **Master data is the only vocabulary.** Every place a variety, clone or rootstock appears it comes from a select — free text is a defect.
@@ -828,7 +830,8 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 
 - AC-1 All 8 growers are represented in every row strip, in canonical order.
 - AC-2 Visible only to Admin/Amministrazione — verified both by hidden navigation and by a route guard.
-- AC-3 Subtotal rows sum the total column *and* each grower column; the row label remains "Totale portainnesto" + rootstock code.
+- AC-3 The list is flat (no group headers, no subtotals); the final row sums the total column *and* each grower column.
+- AC-5 The **Produttore** filter keeps only the combinations involving that grower and highlights their column; the column total is unchanged by the filter.
 - AC-4 Negative values at both levels are bold red with an icon; the two levels are distinguishable (row tint vs chip tint).
 
 ---
@@ -855,9 +858,9 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 | 15 | **Non attribuito** | right | orders with `id_magazzino IS NULL` — never spread across growers |
 | 16 | Totale produttori | right | sum of columns 7–15, for verification |
 
-- Header row height 48 dp to fit two-line grower names; every grower header is sortable and shows its own subtotal in the column footer.
+- Header row height 48 dp to fit two-line grower names; the highlighted (filtered) grower column is tinted in both header and cells.
 - Because the matrix exceeds 1440 dp, the grid scrolls horizontally inside its container with columns 1–2 and the header pinned; a *Solo disponibilità* toggle hides columns 3–5 for narrower screens.
-- Sticky footer row "Totale generale" sums every numeric column.
+- Sticky footer row "Totale generale" sums every numeric column; there are no per-rootstock subtotal rows (PD-2).
 
 **AC**
 
@@ -1487,6 +1490,7 @@ Status after reconciling `docs/db-schema.sql`.
 
 | # | Decision | Rationale | Effect |
 |---|---|---|---|
+| **PD-2** | **Report 2 follows PD-1**: flat list, no rootstock grouping or subtotals, and two new filters — **Codice portainnesto** and **Produttore** | One consistent, filterable table shape across both reports; the grower filter answers "show me this grower's rows" in one choice and highlights the column instead of hiding the context | Supersedes the grouped/modified requirement for the per-grower report. Requirement R11 (role restriction) is unchanged |
 | **PD-1** | **Report 1 is no longer grouped by rootstock**: the rootstock is a filter and a column, and the only aggregate is the grand total | One flat list reads better on a phone and lets the office isolate a single rootstock in one tap instead of scrolling to its group; the per-grower report keeps the grouped/subtotal layout | Supersedes requirement R9's grouping/subtotal rule for Report 1. R10 (red negative rows) still holds. Report 2 is unchanged |
 
 ---

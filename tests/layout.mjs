@@ -128,7 +128,7 @@ for (const route of ROUTES) {
     await new Promise((r) => setTimeout(r, 120));
     const cell1 = document.querySelector('.grid tbody tr.trow td:nth-child(1)');
     const cell2 = document.querySelector('.grid tbody tr.trow td:nth-child(2)');
-    const sub = document.querySelector('.grid tbody tr.subtotal td:nth-child(1)');
+    const sub = document.querySelector('.grid tbody tr.total td:nth-child(1)');
     return {
       before,
       after: {
@@ -137,8 +137,8 @@ for (const route of ROUTES) {
         w1: Math.round(cell1.getBoundingClientRect().width),
         scrolled: Math.round(scroller.scrollLeft),
       },
-      subBg: sub ? getComputedStyle(sub).backgroundColor : null,
-      subWeight: sub ? getComputedStyle(sub).fontWeight : null,
+      totalBg: sub ? getComputedStyle(sub).backgroundColor : null,
+      totalWeight: sub ? getComputedStyle(sub).fontWeight : null,
     };
   });
   ok(pin.after.scrolled > 300, `matrix scrolled ${pin.after.scrolled}px`);
@@ -146,8 +146,8 @@ for (const route of ROUTES) {
      `first column stays pinned (${pin.after.c1} vs panel ${pin.before.panel})`);
   ok(Math.abs(pin.after.c2 - (pin.after.c1 + pin.after.w1)) <= 2,
      `second column stays pinned next to it (${pin.after.c2})`);
-  ok(pin.subBg === 'rgb(233, 245, 239)', `frozen subtotal cell keeps the brand tint (${pin.subBg})`);
-  ok(String(pin.subWeight) === '700', `frozen subtotal cell stays bold (${pin.subWeight})`);
+  ok(pin.totalBg === 'rgb(233, 245, 239)', `frozen total cell keeps the brand tint (${pin.totalBg})`);
+  ok(String(pin.totalWeight) === '700', `frozen total cell stays bold (${pin.totalWeight})`);
   await ctx.close();
 }
 
@@ -190,19 +190,11 @@ for (const route of ROUTES) {
     return {
       groups: t.querySelectorAll('tbody tr.group').length,
       subs: t.querySelectorAll('tbody tr.subtotal').length,
-      subWeight: (() => {
-        const sub = t.querySelector('tbody tr.subtotal td');
-        return sub ? getComputedStyle(sub).fontWeight : null;
-      })(),
-      subBg: (() => {
-        const sub = t.querySelector('tbody tr.subtotal td');
-        return sub ? getComputedStyle(sub).backgroundColor : null;
-      })(),
+      totals: t.querySelectorAll('tbody tr.total').length,
     };
   });
-  ok(m.groups > 0 && m.subs > 0, `per-grower report still groups by rootstock (${m.groups} groups, ${m.subs} subtotals)`);
-  ok(String(m.subWeight) === '700' && m.subBg === 'rgb(233, 245, 239)',
-     `per-grower subtotals stay bold and tinted (${m.subWeight}/${m.subBg})`);
+  ok(m.groups === 0 && m.subs === 0, `per-grower report is flat too (${m.groups} groups, ${m.subs} subtotals)`);
+  ok(m.totals === 1, `per-grower report has one grand total (${m.totals})`);
   await ctx.close();
 }
 
@@ -227,6 +219,30 @@ for (const [w, cols] of [[390, 2], [900, 3], [1440, 4]]) {
   ok(d.minH >= 44, `${w}px: every tile is at least 44px tall (min ${d.minH})`);
   ok(d.minW >= 44, `${w}px: every tile is at least 44px wide (min ${d.minW})`);
   ok(d.docScroll <= d.win + 1, `${w}px: launcher does not overflow horizontally`);
+  await ctx.close();
+}
+
+/* the grower filter highlights that grower's column */
+{
+  const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/produttore?produttore=Mori%20Marco');
+  const h = await page.evaluate(() => {
+    const th = [...document.querySelectorAll('.grid thead th')];
+    const hlCols = th.filter((t) => t.classList.contains('grower-hl'));
+    const idx = hlCols.length ? th.indexOf(hlCols[0]) : -1;
+    const firstRow = document.querySelector('.grid tbody tr.trow');
+    const cells = firstRow ? [...firstRow.querySelectorAll('td')] : [];
+    return {
+      hlCount: hlCols.length,
+      label: hlCols.length ? hlCols[0].textContent.trim() : null,
+      thBg: hlCols.length ? getComputedStyle(hlCols[0]).backgroundColor : null,
+      cellBg: idx >= 0 && cells[idx] ? getComputedStyle(cells[idx]).backgroundColor : null,
+      rows: document.querySelectorAll('.grid tbody tr.trow').length,
+    };
+  });
+  ok(h.hlCount === 1 && h.label === 'Mori Marco', `one highlighted column (${h.label})`);
+  ok(h.thBg === 'rgb(233, 245, 239)' && h.cellBg === 'rgb(233, 245, 239)',
+     `header and cells of the filtered column are tinted (${h.thBg}/${h.cellBg})`);
+  ok(h.rows > 0, `filtered rows rendered (${h.rows})`);
   await ctx.close();
 }
 
