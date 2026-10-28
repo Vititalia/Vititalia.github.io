@@ -184,7 +184,7 @@ export function buildTable({ cols, rows, caption, scroll = false }) {
     if (r.type === 'empty') {
       return `<tr class="empty-row"><td colspan="${cols.length}">${r.cells[0].html}</td></tr>`;
     }
-    const cls = r.type === 'row' ? (r.cls || 'row') : r.type;
+    const cls = r.type === 'row' ? (r.cls || 'trow') : r.type;
     return `<tr class="${cls}">${r.cells.map((c) => {
       const span = c.span ? ` colspan="${c.span}"` : '';
       const label = c.label ? ` data-label="${esc(c.label)}"` : '';

@@ -389,7 +389,7 @@ export function viewImport(root, ctx) {
         caption: 'Correggi il file e ricaricalo: gli errori bloccano l\'importazione.',
         cols: [{ label: 'Riga' }, { label: 'Colonna' }, { label: 'Valore' }, { label: 'Motivo' }],
         rows: r.errors.map((e) => ({
-          type: 'row', cls: 'row negative',
+          type: 'row', cls: 'trow negative',
           cells: [
             { html: String(e.riga), label: 'Riga' },
             { html: `<span class="ident">${U.esc(e.colonna)}</span>`, label: 'Colonna' },

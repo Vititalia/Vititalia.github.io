@@ -179,7 +179,7 @@ export function viewDisponibilita(root, ctx) {
       const neg = row.disponibilita < 0;
       rows.push({
         type: 'row',
-        cls: neg ? 'row negative' : 'row',
+        cls: neg ? 'trow negative' : 'trow',
         cells: [
           { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
           U.metric('Magazzino', U.fmtQty(row.mag)),
@@ -280,7 +280,7 @@ export function viewPerProduttore(root, ctx) {
     for (const row of grp.rows) {
       const neg = row.disponibilita < 0;
       rows.push({
-        type: 'row', cls: neg ? 'row negative' : 'row',
+        type: 'row', cls: neg ? 'trow negative' : 'trow',
         cells: [
           { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
           { html: U.esc(row.portainnesto), label: 'Portainnesto' },
@@ -381,7 +381,7 @@ export function viewIndisponibilita(root, ctx) {
   }
 
   const rows = r.rows.map((row) => ({
-    type: 'row', cls: 'row negative',
+    type: 'row', cls: 'trow negative',
     cells: [
       { html: `⚠ ${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
       { html: U.esc(row.tipologia), label: 'Tipologia' },

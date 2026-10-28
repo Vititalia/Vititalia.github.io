@@ -46,8 +46,9 @@ so a filtered report can be shared or refreshed.
 
 - **≤759 px** — the data table becomes grouped cards: one card per rootstock with its subtotal in the
   header, one block per clone with a metric strip. No horizontal page scrolling.
-- **≥1024 px** — sidebar navigation and true grids with sticky headers; the per-grower matrix scrolls
-  inside its container with the first two columns pinned.
+- **≥1024 px** — sidebar navigation and true data grids: real `table-row`/`table-cell` layout, a
+  sticky header row, and a frozen first column. The per-grower matrix (16 columns) scrolls inside its
+  own panel, never the page.
 - **Data entry** requires ≥1024 px; on a phone `#/dati/*` renders an explicit "solo da PC" card
   instead of a half-working form.
 
@@ -77,8 +78,10 @@ python3 -m http.server 8099     # then open http://localhost:8099
 ## Tests
 
 ```bash
-npm install     # jsdom, for the headless DOM test
-npm test        # engine invariants (650 assertions) + DOM smoke test (74 assertions)
+npm install                                  # jsdom + playwright
+npx playwright install chromium              # once, for the layout test
+npm test                                     # engine invariants (650) + DOM smoke test (74)
+npm run test:layout                          # real-browser layout test (111 assertions)
 ```
 
 - `tests/engine.test.mjs` — every metric identity (`disponibilità = magazzino − ordinato`,
@@ -87,6 +90,11 @@ npm test        # engine invariants (650 assertions) + DOM smoke test (74 assert
 - `tests/smoke.mjs` — boots the real app in jsdom, walks all routes for all four roles, checks the
   permission gates, and drives the lot form, the order form, the *Spedito* toggle and master-data
   creation end to end.
+- `tests/layout.mjs` — opens the app in Chromium and asserts **how it renders**: rows are
+  `table-row`/`table-cell` on PC (not cards), headers are sticky, numeric columns right-aligned, the
+  16-column matrix scrolls inside its panel without widening the page, subtotal rows are bold on
+  brand-50, negative rows bold on danger-50, and the card layout only appears at ≤759 px. Runs against
+  a local server, or against the live site with `LIVE_BASE=https://… npm run test:layout`.
 - `tests/verify_against_views.mjs` — compares the JS engine with the database views (local only).
 
 ## Architecture
