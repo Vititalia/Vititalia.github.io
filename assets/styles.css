@@ -173,7 +173,10 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 /* ---------- grouped report grid (table -> cards) ---------- */
 .report{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--e1);max-width:100%}
 .grid{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
-.grid caption{text-align:left;padding:10px 12px;font-size:12px;color:var(--ink-500);border-bottom:1px solid var(--line)}
+.grid caption{display:block;text-align:left;padding:10px 12px;font-size:12px;color:var(--ink-500);border-bottom:1px solid var(--line)}
+.table-cap{font-size:12px;line-height:16px;color:var(--ink-500);padding:10px 12px;
+  border-bottom:1px solid var(--line);background:var(--surface);overflow-wrap:anywhere}
+.cap-narrow{display:none}
 .grid th{
   background:var(--canvas);color:var(--ink-900);font-size:11px;font-weight:700;letter-spacing:.3px;
   text-transform:uppercase;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;
@@ -336,6 +339,9 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 /* ---------- mobile report cards (≤759px): the table becomes grouped cards ---------- */
 @media (max-width:759px){
   .grid thead{display:none}
+  .table-cap{padding:0 2px 10px;border:0;background:transparent}
+  .cap-wide{display:none}
+  .cap-narrow{display:inline}
   .report{border:0;background:transparent;box-shadow:none}
   .grid,.grid tbody,.grid tr,.grid td{display:block;width:auto}
   .grid tbody tr.group{display:flex;align-items:baseline;justify-content:space-between;gap:8px;background:var(--brand-50);border:1px solid var(--line);border-radius:var(--r-card) var(--r-card) 0 0;padding:8px 12px}

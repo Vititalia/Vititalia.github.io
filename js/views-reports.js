@@ -437,7 +437,10 @@ export function viewPerProduttore(root, ctx) {
          Un impegno entra nella colonna di un produttore solo se è collegato a un lotto
          (<code>id_magazzino</code>); altrimenti finisce in <b>Non attribuito</b>.</span></div>
        <div class="report">${U.buildTable({
-         caption: 'Disponibilità per produttore, raggruppata per portainnesto. Le prime due colonne restano visibili allo scorrimento orizzontale.',
+         caption: {
+           wide: 'Disponibilità per produttore, raggruppata per portainnesto. Le prime due colonne restano visibili allo scorrimento orizzontale.',
+           narrow: 'Disponibilità per produttore, raggruppata per portainnesto.',
+         },
          scroll: true, cols, rows,
        })}</div>`
     : U.emptyState({ icon: '◇', title: 'Nessun dato con i filtri selezionati', text: 'Rimuovi i filtri.', action: 'Rimuovi filtri' });

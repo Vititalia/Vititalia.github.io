@@ -191,7 +191,7 @@ export function combobox(host, { items, placeholder = 'Cerca…', onPick, value 
  * rows: [{type:'group'|'row'|'subtotal'|'total'|'empty', cls?, cells:[{html, label?, cls?, span?}]}]
  * Builds a <table class="grid"> whose CSS turns rows into cards under 760px.
  */
-export function buildTable({ cols, rows, caption, scroll = false }) {
+export function buildTable({ cols, rows, caption, scroll = false, capId }) {
   const head = `<thead><tr>${cols.map((c) =>
     `<th scope="col" class="${c.align === 'r' ? 'r' : ''} ${c.cls || ''}">${esc(c.label)}</th>`).join('')}</tr></thead>`;
   const body = rows.map((r) => {
@@ -209,8 +209,21 @@ export function buildTable({ cols, rows, caption, scroll = false }) {
       return `<td class="${c.cls || ''}"${span}${label}>${c.html}</td>`;
     }).join('')}</tr>`;
   }).join('');
-  const table = `<table class="grid">${caption ? `<caption>${esc(caption)}</caption>` : ''}${head}<tbody>${body}</tbody></table>`;
-  return scroll ? `<div class="table-scroll">${table}</div>` : table;
+  // The caption is a block *before* the table, never a <caption> element: inside a
+  // display:block table (the mobile card layout, and the max-content matrix) a
+  // table-caption falls back to an anonymous shrink-to-fit table and collapses
+  // into a narrow ribbon. `caption` may be a string or {wide, narrow}.
+  const cap = typeof caption === 'string' ? { wide: caption, narrow: caption } : (caption || null);
+  const id = capId || ('cap-' + Math.random().toString(36).slice(2, 8));
+  const capHTML = cap && (cap.wide || cap.narrow)
+    ? `<div class="table-cap" id="${id}">
+         <span class="cap-wide">${esc(cap.wide || cap.narrow)}</span>
+         <span class="cap-narrow">${esc(cap.narrow || cap.wide)}</span>
+       </div>`
+    : '';
+  const described = capHTML ? ` aria-describedby="${id}"` : '';
+  const table = `<table class="grid"${described}>${head}<tbody>${body}</tbody></table>`;
+  return capHTML + (scroll ? `<div class="table-scroll">${table}</div>` : table);
 }
 
 /** Convenience: a metric cell (mobile shows the label above the value). */

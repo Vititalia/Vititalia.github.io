@@ -166,6 +166,49 @@ for (const [w, cols] of [[390, 2], [900, 3], [1440, 4]]) {
   await ctx.close();
 }
 
+/* ---------------- table captions must be full-width blocks, not ribbons ---------------- */
+for (const [w, wantWide] of [[390, false], [1024, true], [1440, true]]) {
+  const { page, ctx } = await open({ width: w, height: 900 }, '#/r/produttore');
+  const d = await page.evaluate(() => {
+    const cap = document.querySelector('.table-cap');
+    const table = document.querySelector('.grid');
+    const report = cap.parentElement;
+    const firstRow = table.querySelector('tbody tr');
+    const cs = getComputedStyle(cap);
+    const cr = cap.getBoundingClientRect();
+    const rr = report.getBoundingClientRect();
+    const visible = (sel) => {
+      const el = cap.querySelector(sel);
+      return el ? getComputedStyle(el).display !== 'none' : false;
+    };
+    return {
+      display: cs.display,
+      capW: Math.round(cr.width), boxW: Math.round(rr.width),
+      capH: Math.round(cr.height),
+      capBottom: Math.round(cr.bottom),
+      firstTop: Math.round(firstRow.getBoundingClientRect().top),
+      overflow: cap.scrollWidth - cap.clientWidth,
+      wideShown: visible('.cap-wide'), narrowShown: visible('.cap-narrow'),
+      wideText: (cap.querySelector('.cap-wide') || {}).textContent || '',
+      narrowText: (cap.querySelector('.cap-narrow') || {}).textContent || '',
+      described: table.getAttribute('aria-describedby') === cap.id,
+      noCaptionEl: document.querySelectorAll('.grid caption').length,
+    };
+  });
+  ok(d.display === 'block', `${w}px: caption is a block, not a table-caption (got ${d.display})`);
+  ok(Math.abs(d.capW - d.boxW) <= 2, `${w}px: caption spans its container (${d.capW}/${d.boxW})`);
+  ok(d.overflow <= 0, `${w}px: caption text does not overflow (${d.overflow})`);
+  ok(d.capBottom <= d.firstTop + 1, `${w}px: caption does not overlap the first row (${d.capBottom} <= ${d.firstTop})`);
+  ok(d.capH < 90, `${w}px: caption is compact (${d.capH}px)`);
+  ok(d.noCaptionEl === 0, `${w}px: no <caption> element is used`);
+  ok(d.described, `${w}px: the table is described by the caption`);
+  ok(d.narrowShown === !wantWide && d.wideShown === wantWide,
+     `${w}px: shows the ${wantWide ? 'wide' : 'narrow'} wording (wide=${d.wideShown} narrow=${d.narrowShown})`);
+  ok(wantWide ? /scorrimento orizzontale/.test(d.wideText) : !/scorrimento orizzontale/.test(d.narrowText),
+     `${w}px: the desktop-only sentence is ${wantWide ? 'present' : 'absent'}`);
+  await ctx.close();
+}
+
 /* ------------- no banner anywhere may fragment into loose flex items ------------- */
 for (const route of ['#/home', '#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita',
                      '#/dati/ordini', '#/dati/import']) {
