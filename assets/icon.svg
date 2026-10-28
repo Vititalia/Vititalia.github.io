@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Vignero">
+  <rect width="512" height="512" rx="96" fill="#175E43"/>
+  <path d="M120 160h56l80 190 80-190h56L292 400h-72z" fill="#E9F5EF"/>
+  <circle cx="140" cy="112" r="16" fill="#2A8A63"/>
+  <circle cx="372" cy="112" r="16" fill="#2A8A63"/>
+</svg>

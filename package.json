@@ -1,0 +1,15 @@
+{
+  "name": "vignero",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vignero · Fede Magazzino — GUI disponibilità barbatelle e portainnesti",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/engine.test.mjs && node tests/smoke.mjs",
+    "test:db": "node tests/verify_against_views.mjs",
+    "serve": "python3 -m http.server 8099"
+  },
+  "dependencies": {
+    "jsdom": "^30.1.3"
+  }
+}

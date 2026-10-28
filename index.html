@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vignero · Fede Magazzino</title>
+<meta name="description" content="Disponibilità di barbatelle e portainnesti: magazzino, impegni, indisponibilità.">
+<meta name="theme-color" content="#175E43">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Vai al contenuto</a>
+
+<header class="appbar">
+  <button class="icon-btn" id="menuBtn" aria-label="Apri il menu" aria-expanded="false" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+  </button>
+  <div class="appbar-title">
+    <strong id="appTitle">Vignero</strong>
+    <span id="appCrumb">Fede Magazzino</span>
+  </div>
+  <button class="role-chip" id="roleChip" title="Cambia profilo">—</button>
+</header>
+
+<div class="shell">
+  <nav class="rail" id="rail" aria-label="Sezioni"></nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<nav class="tabbar" id="tabbar" aria-label="Navigazione principale"></nav>
+
+<div class="demo-banner" id="demoBanner" role="note" hidden>
+  <span>Dati dimostrativi: struttura e anagrafiche reali, quantità sintetiche.</span>
+  <button class="link" id="demoDismiss">Ho capito</button>
+</div>
+
+<div class="sheet-root" id="sheetRoot" aria-hidden="true"></div>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

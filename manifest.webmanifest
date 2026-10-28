@@ -1,0 +1,16 @@
+{
+  "name": "Vignero · Fede Magazzino",
+  "short_name": "Vignero",
+  "description": "Disponibilità di barbatelle e portainnesti: magazzino, impegni, indisponibilità.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F6F8FA",
+  "theme_color": "#175E43",
+  "lang": "it",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

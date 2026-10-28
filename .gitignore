@@ -1,0 +1,4 @@
+node_modules/
+.local/
+*.tmp.mjs
+.DS_Store
