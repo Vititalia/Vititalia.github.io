@@ -475,23 +475,84 @@ for (const [w, expect] of [[1024, 'table-row'], [760, 'table-row'], [759, 'block
 for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita']) {
   const { page, ctx, errs } = await open({ width: 390, height: 844 }, route);
   const d = await page.evaluate(() => {
-    const t = document.querySelector('.grid');
-    const trow = t.querySelector('tbody tr.trow');
-    const td = trow.querySelector('td.metric');
+    const cards = [...document.querySelectorAll('.grid tbody tr.trow')];
+    const card = cards[0];
+    const next = cards[1];
+    if (!card) return { none: true };
+    const cs = getComputedStyle(card);
+    const rect = (el) => el.getBoundingClientRect();
+    const metrics = [...card.querySelectorAll('td.metric')];
+    const normal = metrics.filter((m) => !m.classList.contains('grower') && !m.classList.contains('disp'));
+    const growers = [...card.querySelectorAll('td.metric.grower')];
+    const tops = (list) => list.map((el) => Math.round(rect(el).top));
+    const nTops = tops(normal);
+    const gTops = tops(growers);
+    const labelOf = (el) => getComputedStyle(el, '::before').content.replace(/^"|"$/g, '');
     return {
-      thead: getComputedStyle(t.querySelector('thead')).display,
-      rowDisplay: getComputedStyle(trow).display,
-      hasLabel: td ? getComputedStyle(td, '::before').content : null,
-      docScroll: document.documentElement.scrollWidth,
-      win: window.innerWidth,
-      tabbar: !!document.querySelector('#tabbar a'),
+      cards: cards.length,
+      display: cs.display,
+      radius: parseFloat(cs.borderTopLeftRadius),
+      gap: next ? Math.round(rect(next).top - rect(card).bottom) : null,
+      padTop: parseFloat(cs.paddingTop),
+      titleSize: parseFloat(getComputedStyle(card.querySelector('td.ident')).fontSize),
+      titleWeight: getComputedStyle(card.querySelector('td.ident')).fontWeight,
+      hasChip: !!card.querySelector('td.cell-sub .ident'),
+      chipRadius: card.querySelector('td.cell-sub .ident')
+        ? parseFloat(getComputedStyle(card.querySelector('td.cell-sub .ident')).borderTopLeftRadius) : 0,
+      metrics: metrics.length,
+      metricLabel: normal.length ? labelOf(normal[0]) : null,
+      metricValSize: normal.length ? parseFloat(getComputedStyle(normal[0]).fontSize) : null,
+      metricLabelSize: normal.length ? parseFloat(getComputedStyle(normal[0], '::before').fontSize) : null,
+      metricBoxBg: normal.length ? getComputedStyle(normal[0]).backgroundColor : null,
+      normalPerRow: nTops.length ? nTops.filter((t) => t === nTops[0]).length : 0,
+      growerPerRow: gTops.length ? gTops.filter((t) => t === gTops[0]).length : 0,
+      dispFull: (() => {
+        const disp = card.querySelector('td.metric.disp');
+        return disp ? Math.round(rect(disp).width) : null;
+      })(),
+      cardW: Math.round(rect(card).width),
+      thead: getComputedStyle(document.querySelector('.grid thead')).display,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      negCard: (() => {
+        const n = document.querySelector('.grid tbody tr.negative');
+        if (!n) return null;
+        return { border: getComputedStyle(n).borderTopColor, bg: getComputedStyle(n).backgroundColor };
+      })(),
+      totalRow: (() => {
+        const t = document.querySelector('.grid tbody tr.total');
+        if (!t) return null;
+        const cs2 = getComputedStyle(t);
+        return { display: cs2.display, radius: parseFloat(cs2.borderTopLeftRadius), w: Math.round(rect(t).width) };
+      })(),
     };
   });
-  ok(errs.length === 0, `${route} mobile: no errors`);
-  ok(d.thead === 'none', `${route} mobile: table header hidden (got ${d.thead})`);
-  ok(d.rowDisplay !== 'table-row', `${route} mobile: rows become cards (got ${d.rowDisplay})`);
-  ok(d.docScroll <= d.win + 1, `${route} mobile: no horizontal page scroll`);
-  ok(d.tabbar, `${route} mobile: tab bar present`);
+  ok(!d.none, `${route} @390: cards rendered`);
+  if (d.none) { await ctx.close(); continue; }
+  ok(errs.length === 0, `${route} @390: no errors`);
+  ok(d.thead === 'none', `${route} @390: table header hidden`);
+  ok(d.display === 'flex', `${route} @390: each row is a card (${d.display})`);
+  ok(d.radius >= 8 && d.padTop >= 8, `${route} @390: card has radius ${d.radius} and padding ${d.padTop}`);
+  ok(d.gap !== null && d.gap >= 8, `${route} @390: cards are separated (${d.gap}px)`);
+  ok(d.titleSize >= 14 && d.titleWeight === '700', `${route} @390: title is ${d.titleSize}px bold`);
+  ok(d.hasChip && d.chipRadius >= 4, `${route} @390: rootstock shown as a chip`);
+  ok(d.metricLabel && d.metricLabel.length > 2, `${route} @390: metrics are labelled ("${d.metricLabel}")`);
+  ok(d.metricValSize > d.metricLabelSize,
+     `${route} @390: value ${d.metricValSize}px reads larger than its ${d.metricLabelSize}px label`);
+  ok(d.metricBoxBg !== 'rgba(0, 0, 0, 0)', `${route} @390: each metric is a tinted box`);
+  ok(d.normalPerRow === 2, `${route} @390: two metrics per line (${d.normalPerRow})`);
+  ok(d.dispFull !== null && Math.abs(d.dispFull - d.cardW) < 30,
+     `${route} @390: the availability value spans the card (${d.dispFull}/${d.cardW})`);
+  ok(d.overflow <= 1, `${route} @390: no horizontal overflow`);
+  if (d.negCard) {
+    ok(d.negCard.border === 'rgb(220, 38, 38)', `${route} @390: negative card is outlined red (${d.negCard.border})`);
+  }
+  if (d.totalRow) {
+    ok(d.totalRow.display === 'flex' && d.totalRow.radius >= 8 && d.totalRow.w >= 300,
+       `${route} @390: total row is a card too (${d.totalRow.w}px)`);
+  }
+  if (route === '#/r/produttore') {
+    ok(d.growerPerRow === 4, `per-grower @390: grower values read four per line (${d.growerPerRow})`);
+  }
   await ctx.close();
 }
 

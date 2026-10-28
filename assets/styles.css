@@ -354,32 +354,99 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 
 /* ---------- mobile report cards (≤759px): the table becomes grouped cards ---------- */
 @media (max-width:759px){
+  /* ---- tables become a list of readable cards ----
+     Each row is one card: a title line (clone + variety), a rootstock chip,
+     then labelled field boxes two-by-two (grower values four-by-four). */
   .grid thead{display:none}
+  .report{border:0;background:transparent;box-shadow:none}
   .table-cap{padding:0 2px 10px;border:0;background:transparent}
   .cap-wide{display:none}
   .cap-narrow{display:inline}
-  .report{border:0;background:transparent;box-shadow:none}
-  .grid,.grid tbody,.grid tr,.grid td{display:block;width:auto}
-  .grid tbody tr.group{display:flex;align-items:baseline;justify-content:space-between;gap:8px;background:var(--brand-50);border:1px solid var(--line);border-radius:var(--r-card) var(--r-card) 0 0;padding:8px 12px}
-  .grid tbody tr.group th{background:none;border:0;padding:0;font-size:13px;font-weight:700}
-  .grid tbody tr.group th .g-sub{float:none}
-  .grid tbody tr.group + tr{display:block;background:var(--surface);border:1px solid var(--line);border-top:0}
-  .grid tbody tr.trow,.grid tbody tr.subtotal,.grid tbody tr.total{border:1px solid var(--line);border-top:0;background:var(--surface);padding:8px 10px}
-  .grid tbody tr.trow:last-child{border-radius:0 0 var(--r-card) var(--r-card);margin-bottom:10px}
+  .table-scroll{overflow-x:visible;max-height:none}
+  .table-scroll .grid{width:auto;min-width:0}
+  .grid,.grid tbody{display:block;width:auto}
+
+  .grid tbody tr.trow{
+    display:flex;flex-wrap:wrap;gap:8px;padding:12px;margin-bottom:10px;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
+    box-shadow:var(--e1);
+  }
   .grid tbody tr.trow td{border:0;padding:0}
-  .grid tbody tr.trow td.ident{font-size:13px;font-weight:700;color:var(--ink-900);margin-bottom:6px}
-  .grid tbody tr.trow td.metric::before{content:attr(data-label);display:block;font-size:9px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--ink-500)}
-  .grid tbody tr.trow td.metric{display:inline-block;width:calc(25% - 4px);vertical-align:top;font-size:12px;text-align:left}
-  .grid tbody tr.trow td.metric.r{text-align:left}
-  .grid tbody tr.trow.negative{background:var(--danger-50);box-shadow:inset 3px 0 0 var(--danger-600);border-color:var(--danger-600)}
-  .grid tbody tr.trow.negative td.ident,.grid tbody tr.trow.negative td.metric{color:var(--danger);font-weight:700}
-  .grid tbody tr.subtotal, .grid tbody tr.total{background:var(--brand-50);display:flex;flex-wrap:wrap;gap:6px;justify-content:space-between;border-radius:0 0 var(--r-card) var(--r-card);margin-bottom:10px}
-  .grid tbody tr.subtotal td,.grid tbody tr.total td{border:0;padding:0;font-size:12px;font-weight:700;color:var(--ink-900)}
-  .grid tbody tr.subtotal td::before,.grid tbody tr.total td::before{content:attr(data-label) " ";font-weight:600;color:var(--ink-500)}
-  .grid tbody tr.subtotal td.ident,.grid tbody tr.total td.ident{width:100%;font-size:12px;margin-bottom:4px}
-  .grid tbody tr.subtotal td.metric::before,.grid tbody tr.total td.metric::before{display:none}
+
+  /* title + rootstock */
+  .grid tbody tr.trow td.ident{
+    order:-3;flex:1 1 100%;font-family:var(--mono);font-size:14px;line-height:19px;
+    font-weight:700;color:var(--ink-900);
+  }
+  .grid tbody tr.trow td.ident small{
+    display:block;font-family:var(--font);font-size:11.5px;line-height:16px;
+    font-weight:400;color:var(--ink-500);
+  }
+  .grid tbody tr.trow td.cell-sub{order:-2;flex:1 1 100%}
+  .grid tbody tr.trow td.cell-sub .ident{
+    display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;
+    background:var(--brand-50);color:var(--brand-600);border-radius:6px;padding:2px 8px;
+  }
+
+  /* numeric field boxes */
+  .grid tbody tr.trow td.metric{
+    flex:1 1 calc(50% - 8px);min-width:0;display:flex;flex-direction:column;gap:1px;
+    background:var(--canvas);border-radius:8px;padding:7px 9px;
+    font-size:14px;line-height:19px;font-weight:700;color:var(--ink-900);
+    text-align:left;font-variant-numeric:tabular-nums;
+  }
+  .grid tbody tr.trow td.metric::before{
+    content:attr(data-label);display:block;font-size:10px;line-height:13px;font-weight:700;
+    letter-spacing:.4px;text-transform:uppercase;color:var(--ink-500);
+  }
+  .grid tbody tr.trow td.metric.grower{flex:1 1 calc(25% - 8px);padding:6px 7px;font-size:13px}
+  .grid tbody tr.trow td.metric.grower::before{font-size:9px;letter-spacing:0}
+  .grid tbody tr.trow td.metric.disp{
+    flex:1 1 100%;background:var(--brand-50);font-size:16px;line-height:21px;font-weight:700;
+  }
+  .grid tbody tr.trow td.metric.grower-hl{
+    background:var(--brand-50);box-shadow:inset 0 0 0 1.5px var(--brand-500);
+  }
+
+  /* any other labelled cell (tipologia, note, …) reads as a field too */
+  .grid tbody tr.trow td[data-label]:not(.metric):not(.ident):not(.cell-sub){
+    flex:1 1 calc(50% - 8px);min-width:0;display:flex;flex-direction:column;gap:1px;
+    font-size:12.5px;line-height:17px;color:var(--ink-700);
+  }
+  .grid tbody tr.trow td[data-label]:not(.metric):not(.ident):not(.cell-sub)::before{
+    content:attr(data-label);font-size:9px;line-height:12px;font-weight:700;
+    letter-spacing:.4px;text-transform:uppercase;color:var(--ink-500);
+  }
+
+  /* negative card */
+  .grid tbody tr.trow.negative{
+    background:var(--danger-50);border-color:var(--danger-600);
+    box-shadow:inset 3px 0 0 var(--danger-600);
+  }
+  .grid tbody tr.trow.negative td.ident,.grid tbody tr.trow.negative td.metric,
+  .grid tbody tr.trow.negative td[data-label]{color:var(--danger)}
+  .grid tbody tr.trow.negative td.metric{background:#FDE7E7}
+  .grid tbody tr.trow.negative td.metric::before,
+  .grid tbody tr.trow.negative td[data-label]::before{color:var(--danger)}
+  .grid tbody tr.trow.negative td.metric.disp{background:#FBD5D5}
+
+  /* aggregate row */
+  .grid tbody tr.total,.grid tbody tr.subtotal{
+    display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;
+    padding:10px 12px;margin-bottom:10px;background:var(--brand-50);
+    border:1.5px solid var(--ink-300);border-radius:var(--r-card);
+  }
+  .grid tbody tr.total td,.grid tbody tr.subtotal td{
+    border:0;padding:0;font-size:12px;line-height:16px;font-weight:700;color:var(--ink-900);
+  }
+  .grid tbody tr.total td.ident,.grid tbody tr.subtotal td.ident{flex:1 1 100%;font-size:12.5px}
+  .grid tbody tr.total td.metric,.grid tbody tr.subtotal td.metric{flex:0 0 auto;background:none;padding:0}
+  .grid tbody tr.total td.metric::before,.grid tbody tr.subtotal td.metric::before{
+    display:inline;font-size:9px;letter-spacing:.3px;
+  }
+  .grid tbody tr.total td.metric::after,.grid tbody tr.subtotal td.metric::after{content:" "}
+
   .grid tbody tr.empty-row td{padding:20px;text-align:center;color:var(--ink-500);font-size:13px}
-  .table-scroll{overflow-x:visible}
 }
 
 @media (prefers-reduced-motion:reduce){

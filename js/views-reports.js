@@ -209,7 +209,7 @@ export function viewHome(root, ctx) {
             cells: [
               { html: U.esc(l.anno), label: 'Anno' },
               { html: U.esc(l.produttore || '—'), label: 'Produttore' },
-              { html: `<span class="ident">${U.esc(l.clone)}<small>${U.esc(l.varieta)} · ${U.esc(l.portainnesto)}</small></span>`, label: 'Varietà / clone' },
+              { html: `${U.esc(l.clone)}<small>${U.esc(l.varieta)} · ${U.esc(l.portainnesto)}</small>`, label: 'Varietà / clone', cls: 'ident' },
               U.metric('Quantità', U.fmtQty(l.quantita)),
             ],
           })) : [{ type: 'empty', cells: [{ html: 'Nessun lotto registrato.' }] }],
@@ -282,12 +282,12 @@ export function viewDisponibilita(root, ctx) {
       cls: neg ? 'trow negative' : 'trow',
       cells: [
         { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto' },
+        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
         U.metric('Magazzino', U.fmtQty(row.mag)),
         U.metric('Ordinato', U.fmtQty(row.ord)),
         U.metric('Di cui spedito', U.fmtQty(row.sped)),
         U.metric('Da spedire', U.fmtQty(row.daSpedire)),
-        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg }),
+        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
       ],
     };
   });
@@ -369,12 +369,12 @@ export function viewPerProduttore(root, ctx) {
       cls: neg ? 'trow negative' : 'trow',
       cells: [
         { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto' },
+        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
         U.metric('Magazzino', U.fmtQty(row.mag)),
         U.metric('Ordinato', U.fmtQty(row.ord)),
         U.metric('Di cui spedito', U.fmtQty(row.sped)),
-        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg }),
-        ...r.growers.map((g) => U.metric(g, U.fmtSigned(row.per[g]), { negative: row.per[g] < 0 })),
+        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
+        ...r.growers.map((g) => U.metric(g, U.fmtSigned(row.per[g]), { negative: row.per[g] < 0, cls: 'grower' })),
         U.metric('Non attribuito', U.fmtSigned(row.nonAttr), { negative: row.nonAttr < 0 }),
         U.metric('Tot. produttori', U.fmtSigned(row.totaleProduttori), { negative: row.totaleProduttori < 0 }),
       ].map((c, i) => {
@@ -476,10 +476,10 @@ export function viewIndisponibilita(root, ctx) {
       { html: `⚠ ${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
       { html: U.esc(row.tipologia), label: 'Tipologia' },
       { html: U.esc(row.produzione), label: 'Produzione' },
-      { html: U.esc(row.portainnesto), label: 'Portainnesto' },
+      { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
       U.metric('Magazzino', U.fmtQty(row.mag)),
       U.metric('Ordinato', U.fmtQty(row.ord)),
-      U.metric('Deficit', '\u2212' + U.fmtQty(row.deficit), { negative: true }),
+      U.metric('Deficit', '\u2212' + U.fmtQty(row.deficit), { negative: true, cls: 'disp' }),
     ],
   }));
 

@@ -77,8 +77,11 @@ phone (four from 640 px), and the recent-lots and shortage panels follow below i
 
 ### Responsive behaviour
 
-- **≤759 px** — the data table becomes grouped cards: one card per rootstock with its subtotal in the
-  header, one block per clone with a metric strip. No horizontal page scrolling.
+- **≤759 px** — every table becomes a list of cards, one per row: a title line (clone code in mono, the
+  variety beneath), the rootstock as a chip, then labelled field boxes — two per line, values 14 px over
+  10 px labels, the availability value full width and emphasised, and the grower values four per line
+  on the per-grower report. Negative rows are outlined and tinted red, and the grand total is a card
+  too. No horizontal page scrolling.
 - **≥1024 px** — sidebar navigation and true data grids: real `table-row`/`table-cell` layout, a
   sticky header row, and frozen clone/rootstock columns. The content column and its tables span the
   **full width** between the sidebar and the page edge (no centred max-width, no empty band), and a
