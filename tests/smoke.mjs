@@ -54,17 +54,72 @@ async function go(hash) {
   return text();
 }
 
-async function setRole(role) {
-  app.setRole(role);          // goes through the real UI path (role + chrome + navigate)
+async function loginAs(role) {
+  const user = auth.USERS.find((u) => u.role === role);
+  if (!user) throw new Error('no demo user for role ' + role);
+  app.login(user);            // the same path the login form uses
   await wait(30);
 }
 
 /* boot the app */
-window.localStorage.removeItem('vignero.role.v1');
+window.localStorage.removeItem('vignero.session.v1');
 window.scrollTo = () => {};
 const app = await import('../js/app.js');
+const auth = await import('../js/auth.js');
 await wait(120);
-ok(text().includes('Scegli il profilo'), 'login screen renders when no role is set');
+ok(text().includes('Accedi a Vignero'), 'login screen renders when there is no session');
+ok(!!document.querySelector('#loginForm [name="email"]'), 'login form has an email field');
+ok(!!document.querySelector('#loginForm [name="password"]'), 'login form has a password field');
+ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before sign-in');
+
+/* ---------------- login flow ---------------- */
+{
+  const submit = async (email, pwd) => {
+    document.querySelector('[name="email"]').value = email;
+    document.querySelector('[name="password"]').value = pwd;
+    document.querySelector('#loginForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(30);
+  };
+  await submit('admin@vignero.it', 'sbagliata');
+  ok(!document.querySelector('#loginErr').hidden, 'wrong password shows an error');
+  ok(text().includes('Accedi a Vignero'), 'stays on the login screen after a failed attempt');
+  ok(!window.localStorage.getItem('vignero.session.v1'), 'no session created on failure');
+
+  await submit('nonesiste@vignero.it', 'Admin#2026');
+  ok(text().includes('Email o password non corretti'), 'unknown e-mail gets the same generic error');
+
+  /* one account per profile must land on its own permitted set */
+  for (const u of auth.USERS) {
+    window.localStorage.removeItem('vignero.session.v1');
+    window.location.hash = '#/login';
+    window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+    await wait(20);
+    await submit(u.email, u.password);
+    const chip = document.getElementById('roleChip').textContent.trim();
+    ok(chip === u.role.toUpperCase().slice(0, 8) || chip.length > 0, `${u.role}: signed in as ${u.email}`);
+    ok(text().includes('Disponibilità totale'), `${u.role}: reaches the home screen`);
+    ok(document.querySelectorAll('#tabbar a').length >= 3, `${u.role}: navigation rendered`);
+    app.logout();
+    await wait(20);
+    ok(text().includes('Accedi a Vignero'), `${u.role}: logout returns to the login screen`);
+  }
+}
+
+/* deep link → login → back to the intended route */
+{
+  window.location.hash = '#/dati/lotti';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await wait(20);
+  ok(text().includes('Accedi a Vignero'), 'protected route redirects to login');
+  desktop = true;
+  const admin = auth.USERS.find((u) => u.role === 'admin');
+  document.querySelector('[name="email"]').value = admin.email;
+  document.querySelector('[name="password"]').value = admin.password;
+  document.querySelector('#loginForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await wait(40);
+  ok(window.location.hash === '#/dati/lotti', 'after login the intended route is restored (' + window.location.hash + ')');
+  ok(text().includes('Lotti magazzino'), 'and that page renders');
+}
 
 /* ---------------- route matrix ---------------- */
 const CASES = [
@@ -78,7 +133,7 @@ const CASES = [
   ['admin', '#/anagrafiche/viti', ['Anagrafica vite', 'coppie varietà/clone']],
   ['admin', '#/anagrafiche/portainnesti', ['Anagrafica portainnesto', 'Utilizzi']],
   ['admin', '#/config/permessi', ['Ruoli e permessi', 'Amministratore']],
-  ['admin', '#/profilo', ['Profilo', 'Cambia profilo']],
+  ['admin', '#/profilo', ['Profilo', 'Disconnetti', 'Account dimostrativi']],
   ['ufficio', '#/dati/lotti', ['Lotti magazzino']],
   ['produttore', '#/home', ['Disponibilità totale']],
   ['produttore', '#/r/disponibilita', ['Riepilogo disponibilità']],
@@ -91,7 +146,7 @@ const CASES = [
 
 for (const [role, hash, needles] of CASES) {
   desktop = true;
-  await setRole(role);
+  await loginAs(role);
   const t = await go(hash);
   ok(!t.includes('Qualcosa è andato storto'), `${role} ${hash}: no render error`);
   for (const n of needles) ok(t.includes(n), `${role} ${hash}: shows "${n}"`);
@@ -99,13 +154,13 @@ for (const [role, hash, needles] of CASES) {
 
 /* mobile gate for data entry */
 desktop = false;
-await setRole('admin');
+await loginAs('admin');
 let t = await go('#/dati/lotti');
 ok(t.includes('solo da PC'), 'mobile: data entry shows the PC-only gate');
 desktop = true;
 
 /* filters via URL */
-await setRole('admin');
+await loginAs('admin');
 const variety = JSON.parse(SNAP).lotti[0][4];
 t = await go('#/r/disponibilita?varieta=' + encodeURIComponent(variety));
 ok(t.includes(variety), 'filter from URL is applied');

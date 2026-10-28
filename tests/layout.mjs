@@ -21,7 +21,13 @@ const ROUTES = ['#/home', '#/r/disponibilita', '#/r/produttore', '#/r/indisponib
 async function open(viewport, route) {
   const ctx = await browser.newContext({ viewport });
   await ctx.addInitScript(() => {
-    try { localStorage.setItem('vignero.role.v1', 'admin'); localStorage.setItem('vignero.demo.dismissed', '1'); } catch {}
+    try {
+      localStorage.setItem('vignero.session.v1', JSON.stringify({
+        userId: 'u-admin', email: 'admin@vignero.it', name: 'Paola Neri',
+        role: 'admin', grower: null, issuedAt: Date.now(), exp: Date.now() + 3600000,
+      }));
+      localStorage.setItem('vignero.demo.dismissed', '1');
+    } catch {}
   });
   const page = await ctx.newPage();
   const errs = [];

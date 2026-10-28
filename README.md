@@ -20,13 +20,33 @@ deliberately restricted to PC.
 | **Produttore** | Read the availability and shortage reports | phone first |
 | **Vendite** | Read the availability report only — the most restricted module | phone first |
 
-Pick any profile on the login screen; navigation, routes and data are all gated by the same
-permission matrix (`js/permissions.js`), which is also shown in-app under *Ruoli e permessi*.
+### Accounts
+
+Sign in at the login screen with one of the four demo users — the session determines the role, and
+navigation, routes and data are all gated by the same permission matrix (`js/permissions.js`), also
+shown in-app under *Ruoli e permessi*.
+
+| Profile | Email | Password | Notes |
+|---|---|---|---|
+| Amministratore | `admin@vignero.it` | `Admin#2026` | everything, including *Ruoli e permessi* |
+| Amministrazione | `ufficio@vignero.it` | `Ufficio#2026` | data entry + all reports |
+| Produttore | `produttore@vignero.it` | `Produttore#2026` | linked to the grower *Mori Marco*, read-only |
+| Vendite | `vendite@vignero.it` | `Vendite#2026` | availability report only |
+
+The same list is available in the collapsible *Account dimostrativi* block on the login screen (each
+row has a **Usa** button that fills and submits the form) and under *Profilo*.
+
+> **The authentication is a client-side demo.** Credentials are checked in the browser against a
+> static list (`js/auth.js`), the session is a `localStorage` record with an 8-hour expiry, and it
+> protects nothing — anyone can set the session themselves. It exists to demonstrate the login flow,
+> the guarded routes and the role-derived navigation. A real deployment must authenticate on a server
+> and return a signed token.
 
 ### Screens
 
 | Route | Screen | Notes |
 |---|---|---|
+| `#/login` | Accedi | email + password, one account per profile, session of 8 h |
 | `#/home` | Panoramica | 4 KPIs, recent lots, top shortages, report shortcuts |
 | `#/r/disponibilita` | Riepilogo disponibilità | grouped by rootstock, **Totale portainnesto** subtotals, negative rows bold red |
 | `#/r/produttore` | Riepilogo per produttore | 16 columns: 8 growers + *Non attribuito* + total, frozen first columns |
@@ -37,7 +57,7 @@ permission matrix (`js/permissions.js`), which is also shown in-app under *Ruoli
 | `#/anagrafiche/viti` | Anagrafica vite | one row per variety+clone pair, grouped by variety |
 | `#/anagrafiche/portainnesti` | Anagrafica portainnesto | code + usage count |
 | `#/config/permessi` | Ruoli e permessi | the matrix the app enforces |
-| `#/profilo` | Profilo | switch profile, reset local edits |
+| `#/profilo` | Profilo | session + logout, reset local edits, demo accounts |
 
 Filters (Tipologia, Produzione, searchable Codice varietà) are single-select and live **in the URL**,
 so a filtered report can be shared or refreshed.
@@ -87,9 +107,10 @@ npm run test:layout                          # real-browser layout test (111 ass
 - `tests/engine.test.mjs` — every metric identity (`disponibilità = magazzino − ordinato`,
   subtotals = sum of rows, totals = sum of subtotals), sort orders, filter behaviour and the
   validation rules (F-V1…F-V8).
-- `tests/smoke.mjs` — boots the real app in jsdom, walks all routes for all four roles, checks the
-  permission gates, and drives the lot form, the order form, the *Spedito* toggle and master-data
-  creation end to end.
+- `tests/smoke.mjs` — boots the real app in jsdom, exercises the **login form** (wrong password,
+  unknown e-mail, each of the four accounts, logout, and the redirect back to the route requested
+  before signing in), walks all routes for all four roles, checks the permission gates, and drives the
+  lot form, the order form, the *Spedito* toggle and master-data creation end to end.
 - `tests/layout.mjs` — opens the app in Chromium and asserts **how it renders**: rows are
   `table-row`/`table-cell` on PC (not cards), headers are sticky, numeric columns right-aligned, the
   16-column matrix scrolls inside its panel without widening the page, subtotal rows are bold on
@@ -108,7 +129,8 @@ js/filters.js           the shared filter bar
 js/ui.js                formatting, responsive table builder, sheets, combobox
 js/views-reports.js     login, home, the three reports, matrix, profile
 js/views-data.js        lots, orders, CSV import, master data
-js/app.js               router, role state, guards, chrome
+js/auth.js              demo users (one per profile), authenticate(), session store
+js/app.js               router, session state, guards, chrome
 data/snapshot.json      the demo dataset
 tests/                  engine, DOM smoke, DB-view verification
 scripts/                optional tooling that built the snapshot (see scripts/README.md)

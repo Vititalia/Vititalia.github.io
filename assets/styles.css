@@ -242,6 +242,13 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 .locked h2{font-size:18px;color:var(--ink-900);margin:10px 0 6px}
 .locked p{font-size:13px;color:var(--ink-500);margin-bottom:16px}
 
+.login-mark{display:grid;place-items:center;width:56px;height:56px;margin:0 auto 10px;border-radius:16px;
+  background:var(--brand-600);color:#fff;font-weight:700;font-size:24px}
+.demo-accounts{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.demo-accounts summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--brand-600)}
+.demo-accounts table{width:100%;font-size:12px;margin-top:10px;border-collapse:collapse}
+.demo-accounts td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+
 /* ---------- utilities ---------- */
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .row-between{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}

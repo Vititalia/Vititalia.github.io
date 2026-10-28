@@ -2,32 +2,98 @@
 import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
+import * as A from './auth.js';
 import { filterBar, parseFilters, serializeFilters, activeChips } from './filters.js';
 
 /* ------------------------------------------------------------- S-01 login */
 export function viewLogin(root, ctx) {
   root.innerHTML = `
-    <div class="page-head"><div>
-      <p class="eyebrow">Accesso</p>
-      <h1>Scegli il profilo</h1>
-      <p class="sub">Ambiente dimostrativo: nessuna password richiesta. Ogni profilo
-        vede solo le sezioni consentite dalla matrice dei permessi.</p>
-    </div></div>
-    <div class="tile-list" role="list">
-      ${P.ROLES.map((r) => `
-        <button class="tile" type="button" role="listitem" data-role="${r.key}" style="text-align:left;cursor:pointer;border:1px solid var(--line)">
-          <span class="badge" style="background:var(--brand-50);color:var(--brand-600)">${U.esc(r.short)}</span>
-          <span>
-            <span class="t-title">${U.esc(r.label)}</span>
-            <span class="t-sub">${U.esc(r.blurb)}</span>
-          </span>
-          <span class="t-go" aria-hidden="true">›</span>
-        </button>`).join('')}
-    </div>
-    <p class="hint">Dati dimostrativi: struttura e anagrafiche reali, quantità sintetiche.</p>`;
-  root.querySelectorAll('[data-role]').forEach((b) => {
-    b.addEventListener('click', () => ctx.setRole(b.dataset.role));
+    <div style="max-width:420px;margin:4vh auto 0">
+      <div class="card card-pad">
+        <div style="text-align:center;margin-bottom:18px">
+          <div class="login-mark" aria-hidden="true">${U.esc('V')}</div>
+          <h1 style="font-size:20px;line-height:26px;color:var(--ink-900)">Accedi a Vignero</h1>
+          <p class="caption">Fede Magazzino · disponibilità di barbatelle e portainnesti</p>
+        </div>
+
+        <div class="banner banner-error" id="loginErr" role="alert" hidden></div>
+
+        <form id="loginForm" novalidate>
+          <label class="field"><span>Email</span>
+            <input type="email" name="email" autocomplete="username" required
+                   placeholder="nome@vignero.it" autocapitalize="none" spellcheck="false"></label>
+          <label class="field"><span>Password</span>
+            <input type="password" name="password" autocomplete="current-password" required></label>
+          <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Accedi</button>
+          <p class="hint" style="text-align:center">Sessione di 8 ore. Le credenziali vengono
+            verificate nel browser: nessun dato lascia il dispositivo.</p>
+        </form>
+
+        <details class="demo-accounts">
+          <summary>Account dimostrativi (uno per profilo)</summary>
+          <table>
+            <tbody>
+              ${A.USERS.map((u) => `
+                <tr>
+                  <td><b>${U.esc(P.roleLabel(u.role))}</b><br>
+                      <span class="mono" style="font-size:11px">${U.esc(u.email)}</span><br>
+                      <span class="mono" style="font-size:11px;color:var(--ink-500)">${U.esc(u.password)}</span></td>
+                  <td style="text-align:right;width:64px">
+                    <button class="btn btn-secondary btn-sm" type="button" data-fill="${U.esc(u.email)}">Usa</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+          <p class="hint">Autenticazione dimostrativa lato client: dimostra il flusso di accesso,
+            non protegge nulla. In produzione l'accesso va verificato dal server.</p>
+        </details>
+      </div>
+    </div>`;
+
+  const form = root.querySelector('#loginForm');
+  const errBox = root.querySelector('#loginErr');
+  const btn = root.querySelector('#loginBtn');
+
+  const showError = (msg, field) => {
+    errBox.hidden = false;
+    errBox.textContent = msg;
+    if (field) {
+      const el = form.elements[field];
+      el.setAttribute('aria-invalid', 'true');
+      el.focus();
+    }
+  };
+  const attempt = (email, password) => {
+    const res = A.authenticate(email, password);
+    if (!res.ok) { showError(res.error, 'password'); return; }
+    ctx.login(res.user);
+  };
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    errBox.hidden = true;
+    form.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+    const email = form.elements.email.value;
+    const password = form.elements.password.value;
+    if (!email || !password) { showError('Inserisci email e password.'); return; }
+    btn.disabled = true;
+    btn.textContent = 'Accesso…';
+    attempt(email, password);
+    btn.disabled = false;
+    btn.textContent = 'Accedi';
   });
+
+  root.querySelectorAll('[data-fill]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const u = A.USERS.find((x) => x.email === b.dataset.fill);
+      form.elements.email.value = u.email;
+      form.elements.password.value = u.password;
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+  });
+
+  const first = root.querySelector('[name="email"]');
+  if (first) first.focus();
 }
 
 /* -------------------------------------------------------------- S-02 home */
@@ -44,7 +110,8 @@ export function viewHome(root, ctx) {
     <div class="page-head"><div>
       <p class="eyebrow">Panoramica</p>
       <h1>Disponibilità di magazzino</h1>
-      <p class="sub">Profilo ${U.esc(P.roleLabel(ctx.role))} · ${s.lotti} lotti · ${s.ordiniNonSpediti} impegni non spediti</p>
+      <p class="sub">${ctx.user ? U.esc(ctx.user.name) + ' · ' : ''}${U.esc(P.roleLabel(ctx.role))} ·
+        ${s.lotti} lotti · ${s.ordiniNonSpediti} impegni non spediti</p>
     </div></div>
 
     <div class="kpis">
@@ -439,6 +506,7 @@ export function viewPermessi(root, ctx) {
 
 /* --------------------------------------------------------------- profilo */
 export function viewProfilo(root, ctx) {
+  const s = ctx.session || {};
   const counts = {
     viti: S.store.viti.length, portainnesti: S.store.portainnesti.length,
     lotti: S.store.lotti.length, ordini: S.store.ordini.length,
@@ -446,14 +514,16 @@ export function viewProfilo(root, ctx) {
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Profilo</p>
-      <h1>${U.esc(P.roleLabel(ctx.role))}</h1>
-      <p class="sub">${U.esc(P.ROLES.find((r) => r.key === ctx.role)?.blurb || '')}</p>
+      <h1>${U.esc(s.name || '—')}</h1>
+      <p class="sub">${U.esc(P.roleLabel(s.role))}${s.grower ? ' · produttore ' + U.esc(s.grower) : ''} · ${U.esc(s.email || '')}</p>
     </div></div>
     <div class="stack">
       <section class="card card-pad">
-        <h2 class="eyebrow" style="margin-bottom:8px">Cambia profilo (dimostrazione)</h2>
-        <div class="row">
-          ${P.ROLES.map((r) => `<button class="btn ${r.key === ctx.role ? 'btn-primary' : 'btn-secondary'} btn-sm" type="button" data-role="${r.key}">${U.esc(r.label)}</button>`).join('')}
+        <h2 class="eyebrow" style="margin-bottom:8px">Sessione</h2>
+        <p class="caption">${U.esc(P.ROLES.find((r) => r.key === s.role)?.blurb || '')}</p>
+        <p class="caption mt">Valida ancora ${A.minutesLeft(s)} minuti.</p>
+        <div class="row mt">
+          <button class="btn btn-danger btn-sm" type="button" id="logoutBtn">Disconnetti</button>
         </div>
       </section>
       <section class="card card-pad">
@@ -466,10 +536,25 @@ export function viewProfilo(root, ctx) {
           <a class="btn btn-ghost btn-sm" href="docs/mockups/fede-magazzino-mockup.drawio">Mockup</a>
         </div>
       </section>
+      <section class="card card-pad">
+        <h2 class="eyebrow" style="margin-bottom:8px">Account dimostrativi</h2>
+        <p class="caption">Un utente per profilo (l'autenticazione è lato client: dimostra il flusso,
+          non protegge nulla).</p>
+        <div class="report mt">${U.buildTable({
+          cols: [{ label: 'Profilo' }, { label: 'Utente' }, { label: 'Email' }, { label: 'Password' }],
+          rows: A.USERS.map((u) => ({
+            type: 'row',
+            cells: [
+              { html: U.esc(P.roleLabel(u.role)), label: 'Profilo' },
+              { html: U.esc(u.name), label: 'Utente' },
+              { html: `<span class="ident">${U.esc(u.email)}</span>`, label: 'Email' },
+              { html: `<span class="ident">${U.esc(u.password)}</span>`, label: 'Password' },
+            ],
+          })),
+        })}</div>
+      </section>
     </div>`;
-  root.querySelectorAll('[data-role]').forEach((b) => {
-    b.addEventListener('click', () => ctx.setRole(b.dataset.role));
-  });
+  root.querySelector('#logoutBtn').addEventListener('click', () => ctx.logout());
   root.querySelector('#resetBtn').addEventListener('click', () => {
     U.confirmSheet({
       title: 'Azzerare le modifiche locali?',

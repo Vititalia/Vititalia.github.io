@@ -1,11 +1,11 @@
-/* Vignero · app.js — shell, role, router, guards */
+/* Vignero · app.js — shell, session, router, guards */
 import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
+import * as A from './auth.js';
 import * as R from './views-reports.js';
 import * as D from './views-data.js';
 
-const ROLE_KEY = 'vignero.role.v1';
 const BANNER_KEY = 'vignero.demo.dismissed';
 const isDesktop = () => window.matchMedia('(min-width:1024px)').matches;
 
@@ -15,7 +15,6 @@ const ICONS = {
   alert: '<path d="M12 3 2.5 20h19L12 3z"/><path d="M12 9v5M12 17h.01"/>',
   edit: '<path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M14 6l4 4"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
-  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
@@ -28,24 +27,18 @@ const ROUTES = [
   { re: /^\/dati\/lotti$/, view: D.viewLotti, cap: 'dati.lotti', title: 'Lotti magazzino', crumb: 'Dati / Lotti magazzino', pcOnly: true },
   { re: /^\/dati\/ordini$/, view: D.viewOrdini, cap: 'dati.ordini', title: 'Ordini e impegni', crumb: 'Dati / Ordini e impegni', pcOnly: true },
   { re: /^\/dati\/import$/, view: D.viewImport, cap: 'dati.import', title: 'Import CSV', crumb: 'Dati / Import', pcOnly: true },
-  { re: /^\/anagrafiche\/viti$/, view: D.viewViti, cap: 'anag.viti', title: 'Anagrafica vite', crumb: 'Anagrafiche / Vite' },
+  { re: /^\/anagrafiche\/viti$/, view: D.viewViti, cap: 'anag.viti', title: 'Anagrafica vite', crumb: 'Anagrafiche / Viti' },
   { re: /^\/anagrafiche\/portainnesti$/, view: D.viewPortainnesti, cap: 'anag.portainnesti', title: 'Anagrafica portainnesto', crumb: 'Anagrafiche / Portainnesti' },
   { re: /^\/config\/permessi$/, view: R.viewPermessi, cap: 'config.permessi', title: 'Ruoli e permessi', crumb: 'Configurazione / Permessi' },
   { re: /^\/profilo$/, view: R.viewProfilo, cap: 'profilo', title: 'Profilo', crumb: 'Profilo' },
 ];
 
+let session = null;      // { userId, name, email, role, grower, exp, user }
 let role = null;
+let pendingHash = null;  // route requested before being sent to the login screen
 let current = { path: '/home', params: new URLSearchParams() };
 
-function getRole() {
-  try { return localStorage.getItem(ROLE_KEY); } catch { return null; }
-}
-export function setRole(r) {
-  role = r;
-  try { localStorage.setItem(ROLE_KEY, r); } catch { /* ignore */ }
-  paintChrome();
-  navigate('#/home');
-}
+export const currentSession = () => session;
 
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/home';
@@ -58,14 +51,59 @@ export function navigate(href) {
   else location.hash = href;
 }
 
-/* ------------------------------------------------------------- chrome */
+/* --------------------------------------------------------------- session */
+export function login(user) {
+  session = A.setSession(user);
+  role = session.role;
+  paintChrome();
+  const target = pendingHash || '#/home';
+  pendingHash = null;
+  U.toast(`Ciao ${session.name.split(' ')[0]} · ${P.roleLabel(role)}`);
+  if (location.hash === target) render();
+  else location.hash = target;
+}
+
+export function logout() {
+  A.clearSession();
+  session = null;
+  role = null;
+  pendingHash = null;
+  paintChrome();
+  navigate('#/login');
+  U.toast('Sessione terminata');
+}
+
+function sessionSheet() {
+  if (!session) { navigate('#/login'); return; }
+  U.openSheet({
+    title: 'Sessione',
+    body: `
+      <div class="card card-pad mb">
+        <p class="eyebrow">Utente collegato</p>
+        <p style="font-size:16px;font-weight:700;color:var(--ink-900)">${U.esc(session.name)}</p>
+        <p class="caption">${U.esc(session.email)}</p>
+        <p style="margin-top:8px">
+          <span class="badge badge-ok">${U.esc(P.roleLabel(session.role))}</span>
+          ${session.grower ? `<span class="badge">Produttore: ${U.esc(session.grower)}</span>` : ''}
+        </p>
+        <p class="caption" style="margin-top:8px">Sessione valida ancora ${A.minutesLeft(session)} min.</p>
+      </div>`,
+    actions: [
+      { label: 'Chiudi', class: 'btn-secondary', run: U.closeSheet },
+      { label: 'Disconnetti', class: 'btn-danger', run: () => { U.closeSheet(); logout(); } },
+    ],
+  });
+}
+
+/* ---------------------------------------------------------------- chrome */
 function paintChrome() {
   const chip = document.getElementById('roleChip');
   const rail = document.getElementById('rail');
   const tabbar = document.getElementById('tabbar');
-  const signedIn = !!role;
+  const signedIn = !!session;
+
   chip.textContent = signedIn ? P.roleShort(role) : 'ACCEDI';
-  chip.title = signedIn ? 'Profilo: ' + P.roleLabel(role) + ' · cambia' : 'Scegli un profilo';
+  chip.title = signedIn ? `${session.name} · ${P.roleLabel(role)}` : 'Accedi';
 
   if (!signedIn) {
     rail.innerHTML = '';
@@ -87,41 +125,47 @@ function paintChrome() {
     `<a href="${t.href}" data-nav="${t.href}">${icon(t.icon)}<span>${U.esc(t.label)}</span></a>`).join('');
 }
 
-function setActiveNav(route) {
+function setActiveNav() {
   document.querySelectorAll('[data-nav]').forEach((a) => {
-    const match = a.dataset.nav === '#' + current.path ||
-      (route && a.dataset.nav === '#/r/disponibilita' && current.path.startsWith('/r/'));
-    if (match) a.setAttribute('aria-current', 'page');
+    if (a.dataset.nav === '#' + current.path) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
 }
 
-/* -------------------------------------------------------------- router */
+/* ---------------------------------------------------------------- router */
 export function render() {
   const main = document.getElementById('main');
   const { path, params } = parseHash();
   current = { path, params };
   U.closeSheet();
 
-  let route = ROUTES.find((r) => r.re.test(path));
+  const route = ROUTES.find((r) => r.re.test(path));
   if (!route) { navigate('#/home'); return; }
 
   document.getElementById('appTitle').textContent = route.title;
   document.getElementById('appCrumb').textContent = route.crumb;
   document.title = route.title + ' · Vignero';
 
-  if (!role && route.cap) { navigate('#/login'); return; }
+  // not signed in → remember the destination, then ask for credentials
+  if (!session && route.cap) {
+    const qs = params.toString();
+    pendingHash = '#' + path + (qs ? '?' + qs : '');
+    navigate('#/login');
+    return;
+  }
+  // already signed in → the login screen is meaningless
+  if (session && path === '/login') { navigate('#/home'); return; }
 
   const ctx = {
     role, params, navigate, refresh: () => render(),
-    setRole,
+    session, user: session ? session.user : null, login, logout,
   };
 
   main.innerHTML = '';
-  if (route.cap && !P.can(role, route.cap)) { R.viewDenied(main); setActiveNav(route); return; }
-  if (route.pcOnly && !isDesktop()) { R.viewLockedPC(main); setActiveNav(route); return; }
+  if (route.cap && !P.can(role, route.cap)) { R.viewDenied(main, ctx); setActiveNav(); return; }
+  if (route.pcOnly && !isDesktop()) { R.viewLockedPC(main); setActiveNav(); return; }
 
-  setActiveNav(route);
+  setActiveNav();
   try {
     route.view(main, ctx);
   } catch (err) {
@@ -134,13 +178,15 @@ export function render() {
     const btn = main.querySelector('[data-empty-action]');
     if (btn) btn.addEventListener('click', () => location.reload());
   }
-  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  window.scrollTo(0, 0);
 }
 
-/* ---------------------------------------------------------------- boot */
+/* ------------------------------------------------------------------ boot */
 async function boot() {
-  role = getRole();
+  session = A.getSession();
+  role = session ? session.role : null;
   paintChrome();
+
   try {
     await S.init();
   } catch (err) {
@@ -155,36 +201,22 @@ async function boot() {
   }
 
   const banner = document.getElementById('demoBanner');
-  try {
-    if (localStorage.getItem(BANNER_KEY) !== '1') banner.hidden = false;
-  } catch { /* ignore */ }
+  try { if (localStorage.getItem(BANNER_KEY) !== '1') banner.hidden = false; } catch { /* ignore */ }
   document.getElementById('demoDismiss').addEventListener('click', () => {
     banner.hidden = true;
     try { localStorage.setItem(BANNER_KEY, '1'); } catch { /* ignore */ }
   });
 
   document.getElementById('roleChip').addEventListener('click', () => {
-    if (!role) { navigate('#/login'); return; }
-    U.openSheet({
-      title: 'Cambia profilo',
-      body: `<p class="caption" style="margin-bottom:12px">Ambiente dimostrativo: il cambio profilo ricalcola subito navigazione e permessi.</p>
-        <div class="tile-list">${P.ROLES.map((r) => `
-          <button class="tile" type="button" data-role="${r.key}" style="text-align:left;cursor:pointer">
-            <span class="badge" style="background:var(--brand-50);color:var(--brand-600)">${U.esc(r.short)}</span>
-            <span><span class="t-title">${U.esc(r.label)}</span><span class="t-sub">${U.esc(r.blurb)}</span></span>
-          </button>`).join('')}</div>`,
-    });
-    document.querySelectorAll('.sheet [data-role]').forEach((b) => {
-      b.addEventListener('click', () => { U.closeSheet(); setRole(b.dataset.role); });
-    });
+    if (!session) navigate('#/login');
+    else sessionSheet();
   });
 
   window.addEventListener('resize', U.debounce(() => { paintChrome(); render(); }, 180));
   window.addEventListener('hashchange', render);
 
-  if (!location.hash) location.hash = role ? '#/home' : '#/login';
+  if (!location.hash) location.hash = session ? '#/home' : '#/login';
   else render();
-  if (!location.hash) render();
 }
 
 boot();
