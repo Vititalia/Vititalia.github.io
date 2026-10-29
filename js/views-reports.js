@@ -549,8 +549,8 @@ export function viewIndisponibilita(root, ctx) {
     type: 'row', cls: 'trow negative',
     cells: [
       { html: `⚠ ${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-      { html: U.esc(row.tipologia), label: 'Tipologia' },
-      { html: U.esc(row.produzione), label: 'Produzione' },
+      { html: U.esc(row.tipologia), label: 'Tipologia', cls: 'ctx' },
+      { html: U.esc(row.produzione), label: 'Produzione', cls: 'ctx' },
       { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
       U.metric('Magazzino', U.fmtQty(row.mag)),
       U.metric('Ordinato', U.fmtQty(row.ord)),

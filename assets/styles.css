@@ -411,27 +411,41 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
     background:var(--brand-50);box-shadow:inset 0 0 0 1.5px var(--brand-500);
   }
 
-  /* any other labelled cell (tipologia, note, …) reads as a field too */
-  .grid tbody tr.trow td[data-label]:not(.metric):not(.ident):not(.cell-sub){
+  /* context line: the dimensions that are already fixed by the mandatory filters */
+  .grid tbody tr.trow td.ctx[data-label]{
+    flex:0 0 auto;display:inline;background:none;padding:0;
+    font-size:11px;line-height:15px;color:var(--ink-500);
+  }
+  .grid tbody tr.trow td.ctx[data-label]::before{
+    content:attr(data-label) ":";display:inline;font-size:9px;line-height:12px;font-weight:700;
+    letter-spacing:.3px;text-transform:uppercase;color:var(--ink-300);margin-right:3px;
+  }
+
+  /* any other labelled cell (note, …) reads as a field too */
+  .grid tbody tr.trow td[data-label]:not(.metric):not(.ident):not(.cell-sub):not(.ctx){
     flex:1 1 calc(50% - 8px);min-width:0;display:flex;flex-direction:column;gap:1px;
     font-size:12.5px;line-height:17px;color:var(--ink-700);
   }
-  .grid tbody tr.trow td[data-label]:not(.metric):not(.ident):not(.cell-sub)::before{
+  .grid tbody tr.trow td[data-label]:not(.metric):not(.ident):not(.cell-sub):not(.ctx)::before{
     content:attr(data-label);font-size:9px;line-height:12px;font-weight:700;
     letter-spacing:.4px;text-transform:uppercase;color:var(--ink-500);
   }
 
-  /* negative card */
+  /* negative card: the red marks the alarm (the deficit), not every number —
+     a card where every value is red has no hierarchy and cannot be read */
   .grid tbody tr.trow.negative{
-    background:var(--danger-50);border-color:var(--danger-600);
+    background:var(--surface);border-color:var(--danger-600);
     box-shadow:inset 3px 0 0 var(--danger-600);
   }
-  .grid tbody tr.trow.negative td.ident,.grid tbody tr.trow.negative td.metric,
-  .grid tbody tr.trow.negative td[data-label]{color:var(--danger)}
-  .grid tbody tr.trow.negative td.metric{background:#FDE7E7}
+  .grid tbody tr.trow.negative td.ident{background:none;color:var(--ink-900)}
+  .grid tbody tr.trow.negative td.cell-sub{background:none}
+  .grid tbody tr.trow.negative td.metric{background:var(--canvas);color:var(--ink-900)}
   .grid tbody tr.trow.negative td.metric::before,
-  .grid tbody tr.trow.negative td[data-label]::before{color:var(--danger)}
-  .grid tbody tr.trow.negative td.metric.disp{background:#FBD5D5}
+  .grid tbody tr.trow.negative td[data-label]::before{color:var(--ink-500)}
+  .grid tbody tr.trow.negative td[data-label]:not(.metric){color:var(--ink-700)}
+  .grid tbody tr.trow.negative td.cell-sub .ident{background:var(--canvas);color:var(--ink-700)}
+  .grid tbody tr.trow.negative td.metric.disp{background:var(--danger-50);color:var(--danger)}
+  .grid tbody tr.trow.negative td.metric.disp::before{color:var(--danger)}
 
   /* aggregate row */
   .grid tbody tr.total,.grid tbody tr.subtotal{

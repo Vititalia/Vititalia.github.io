@@ -621,6 +621,72 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   await ctx.close();
 }
 
+/* the shortage cards must read: one red value, neutral body, high contrast */
+{
+  const { page, ctx } = await open({ width: 390, height: 844 }, '#/r/indisponibilita');
+  const d = await page.evaluate(() => {
+    const parse = (c) => (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    const lum = ([r, g, bl]) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bl);
+    };
+    const contrast = (a, bb) => {
+      const la = lum(parse(a)), lb = lum(parse(bb));
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    const card = document.querySelector('.grid tbody tr.trow');
+    if (!card) return { none: true };
+    const cardCs = getComputedStyle(card);
+    const cells = [...card.children].map((td) => {
+      const s = getComputedStyle(td);
+      const bg = s.backgroundColor === 'rgba(0, 0, 0, 0)' ? cardCs.backgroundColor : s.backgroundColor;
+      const before = getComputedStyle(td, '::before');
+      return {
+        cls: td.className,
+        label: (before.content || '').replace(/"/g, ''),
+        labelFont: parseFloat(before.fontSize) || 0,
+        font: parseFloat(s.fontSize),
+        color: s.color, bg,
+        contrast: contrast(s.color, bg),
+        red: /185, 28, 28/.test(s.color),
+        top: Math.round(td.getBoundingClientRect().top),
+        h: Math.round(td.getBoundingClientRect().height),
+      };
+    });
+    return {
+      cardBg: cardCs.backgroundColor,
+      cardBorder: cardCs.borderTopColor,
+      cardH: Math.round(card.getBoundingClientRect().height),
+      cells,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  ok(!d.none, 'shortage cards render');
+  if (d.none) { await ctx.close(); }
+  else {
+    const reds = d.cells.filter((c) => c.red);
+    ok(reds.length === 1, `only the deficit is red (${reds.length} red cells)`);
+    ok(/Deficit/.test(reds[0].label), `and it is the deficit (${reds[0].label})`);
+    ok(d.cardBg === 'rgb(255, 255, 255)', `the card body is neutral (${d.cardBg})`);
+    ok(d.cardBorder === 'rgb(220, 38, 38)', `the card is outlined in red (${d.cardBorder})`);
+    ok(d.cells.every((c) => c.contrast >= 4.5),
+       `every value meets 4.5:1 (min ${Math.min(...d.cells.map((c) => c.contrast)).toFixed(2)})`);
+    const ctxCells = d.cells.filter((c) => /ctx/.test(c.cls));
+    ok(ctxCells.length === 2, `tipologia/produzione are context cells (${ctxCells.length})`);
+    ok(ctxCells.every((c) => c.font <= 12 && c.labelFont <= 10),
+       `context line is quiet (${ctxCells.map((c) => c.font + '/' + c.labelFont).join(', ')})`);
+    ok(new Set(ctxCells.map((c) => c.top)).size === 1, 'the two context values share one line');
+    const deficit = reds[0];
+    ok(deficit.font >= 15, `the deficit is emphasised (${deficit.font}px)`);
+    ok(d.cells.filter((c) => /metric/.test(c.cls) && !/disp/.test(c.cls))
+        .every((c) => c.bg === 'rgb(246, 248, 250)'),
+       'the other metrics sit on a neutral tint');
+    ok(d.cardH <= 260, `the card stays compact (${d.cardH}px)`);
+    ok(d.overflow <= 1, 'no horizontal overflow');
+    await ctx.close();
+  }
+}
+
 /* phone: reports can switch between cards and the full table */
 {
   const { page, ctx } = await open({ width: 390, height: 844 }, '#/r/disponibilita');
