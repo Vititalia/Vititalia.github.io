@@ -183,16 +183,15 @@ No build step, no framework, no backend: static files + `fetch` of one JSON snap
 
 ## Deploy
 
-GitHub Pages serves the **`gh-pages`** branch (root). `main` is the development branch, so publishing
-is two commands:
+The repository is the **organization site** `Vititalia/Vititalia.github.io`, so GitHub Pages serves the
+**root of `main`** directly at <https://vititalia.github.io/> — publishing is one command:
 
 ```bash
-git push origin main            # development branch
-git push origin main:gh-pages   # publish to the live site (~1 min build)
+git push origin main            # development branch = live site (~1 min build)
 ```
 
-The site is a plain static bundle, so no build step or CI is required (and the repository token used
-here cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
+No `gh-pages` branch, no Pages settings, no build step or CI (and the repository token used here
+cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
 
 ## Known limitations / next steps
 
