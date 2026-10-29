@@ -5,7 +5,7 @@ import * as P from './permissions.js';
 
 const PAGE = 40;
 /* one search term per list: a filter typed on one page must not leak into another */
-const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', vitiSearch: '', rootsSearch: '', produttore: '' };
+const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', vitiSearch: '', vitiVarieta: '', rootsSearch: '', produttore: '' };
 
 /* ------------------------------------------------------------- form bits */
 function selectHTML(name, label, options, value, extra = '') {
@@ -548,65 +548,94 @@ function validateRows(rows, headers, kind) {
 
 /* -------------------------------------------------- S-16 anagrafica vite */
 export function viewViti(root, ctx) {
-  const q = state.vitiSearch.toLowerCase();
-  const filtered = S.store.viti.filter((v) => !q ||
-    v.varieta.toLowerCase().includes(q) || v.clone.toLowerCase().includes(q));
-  const groups = new Map();
-  for (const v of filtered) {
-    if (!groups.has(v.varieta)) groups.set(v.varieta, []);
-    groups.get(v.varieta).push(v.clone);
-  }
-  const varieties = [...groups.entries()].sort((a, b) => S.collator().compare(a[0], b[0]));
-  const sliced = varieties.slice(0, state.vitiLimit);
-  const rows = [];
-  for (const [varieta, clones] of sliced) {
-    rows.push({ type: 'group', cells: [{ html: `▦ ${U.esc(varieta)}`, sub: `${clones.length} cloni` }] });
-    for (const clone of clones.slice(0, 12)) {
-      const used = S.usageOfPair(varieta, clone);
-      rows.push({
-        type: 'row',
-        cells: [
-          { html: `<span class="ident">${U.esc(clone)}</span>`, cls: 'ident', label: 'Codice clone' },
-          { html: `<span class="ident">${U.esc(varieta)}</span>`, label: 'Codice varietà', cls: 'cell-sub' },
-          U.metric('Utilizzi', U.fmtQty(used)),
-          { html: used ? '<span class="badge badge-ok">in uso</span>' : '<span class="badge">libera</span>', label: 'Stato' },
-          { html: `<div class="row" style="gap:6px">
-              <button class="btn btn-secondary btn-sm" type="button" data-edit-pair="${U.esc(varieta)}|${U.esc(clone)}">Modifica</button>
-              <button class="btn btn-danger btn-sm" type="button" data-del-pair="${U.esc(varieta)}|${U.esc(clone)}">Elimina</button>
-            </div>`, label: 'Azioni', cls: 'no-print' },
-        ],
-      });
-    }
-    if (clones.length > 12) {
-      rows.push({ type: 'row', cells: [{ html: `<span class="caption">+${clones.length - 12} altri cloni</span>`, span: 5 }] });
-    }
-  }
+  const q = state.vitiSearch.trim().toLowerCase();
+  const varieta = state.vitiVarieta || '';
+  const C = S.collator();
+
+  const filtered = S.store.viti
+    .filter((v) => !varieta || v.varieta === varieta)
+    .filter((v) => !q || v.clone.toLowerCase().includes(q) || v.varieta.toLowerCase().includes(q))
+    .slice()
+    .sort((a, b) => C.compare(a.varieta, b.varieta) || C.compare(a.clone, b.clone));
+  const shown = filtered.slice(0, state.vitiLimit);
+
+  const rows = shown.map((v) => {
+    const used = S.usageOfPair(v.varieta, v.clone);
+    return {
+      type: 'row',
+      cells: [
+        { html: `<span class="ident">${U.esc(v.clone)}</span>`, cls: 'ident', label: 'Codice clone' },
+        { html: `<span class="ident">${U.esc(v.varieta)}</span>`, label: 'Codice varietà', cls: 'cell-sub' },
+        U.metric('Utilizzi', U.fmtQty(used)),
+        { html: used ? '<span class="badge badge-ok">in uso</span>' : '<span class="badge">libera</span>', label: 'Stato' },
+        { html: `<div class="row" style="gap:6px">
+            <button class="btn btn-secondary btn-sm" type="button" data-edit-pair="${U.esc(v.varieta)}|${U.esc(v.clone)}">Modifica</button>
+            <button class="btn btn-danger btn-sm" type="button" data-del-pair="${U.esc(v.varieta)}|${U.esc(v.clone)}">Elimina</button>
+          </div>`, label: 'Azioni', cls: 'no-print' },
+      ],
+    };
+  });
+
+  const subtitle = varieta
+    ? `${U.fmtQty(filtered.length)} cloni di ${U.esc(varieta)}`
+    : `${U.fmtQty(S.store.viti.length)} coppie varietà/clone · ${U.fmtQty(S.store.index.varieta.length)} varietà`;
 
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Anagrafiche / Vite</p>
       <h1>Anagrafica vite</h1>
-      <p class="sub">${U.fmtQty(S.store.viti.length)} coppie varietà/clone · inserimento, modifica ed eliminazione</p>
+      <p class="sub">${subtitle} · inserimento, modifica ed eliminazione</p>
     </div>
     <div class="spacer"></div>
     <div class="row">${P.can(ctx.role, 'anag.viti') ? '<button class="btn btn-primary" type="button" id="newBtn">+ Varietà / clone</button>' : ''}</div></div>
 
     <div class="card card-pad mb">
-      <label class="field" style="margin:0"><span>Cerca varietà o clone</span>
-        <input type="search" id="q" value="${U.esc(state.vitiSearch)}" placeholder="es. CHARDONNAY"></label>
+      <div class="filters" style="margin:0">
+        <div class="field" style="margin:0">
+          <span>Varietà</span>
+          <div id="varietyFilter"></div>
+        </div>
+        <label class="field" style="margin:0"><span>Cerca clone</span>
+          <input type="search" id="q" value="${U.esc(state.vitiSearch)}" placeholder="es. CL-1"></label>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" type="button" id="resetViti">Azzera</button>
+        </div>
+      </div>
     </div>
 
     <div class="report">${U.buildTable({
-      caption: 'Raggruppato per varietà: il clone appartiene sempre a una varietà (F-V2). Una coppia usata da lotti o impegni non è modificabile né eliminabile.',
+      caption: 'Una riga per coppia varietà/clone, ordinata per varietà e clone. Il clone appartiene sempre a una varietà (F-V2); una coppia usata da lotti o impegni non è modificabile né eliminabile.',
       cols: [{ label: 'Codice clone' }, { label: 'Codice varietà' }, { label: 'Utilizzi', align: 'r' },
              { label: 'Stato' }, { label: 'Azioni' }],
-      rows: rows.length ? rows : [{ type: 'empty', cells: [{ html: 'Nessuna coppia trovata.' }] }],
+      rows: rows.length ? rows : [{ type: 'empty', cells: [{ html: 'Nessuna coppia con questi filtri.' }] }],
     })}</div>
-    ${varieties.length > sliced.length ? `<div class="mt"><button class="btn btn-secondary btn-block" type="button" id="more">Mostra altre varietà</button></div>` : ''}`;
+    ${filtered.length > shown.length
+      ? `<div class="mt"><button class="btn btn-secondary btn-block" type="button" id="more">Mostra altri ${Math.min(state.vitiLimit, filtered.length - shown.length)} cloni</button></div>`
+      : ''}`;
+
+  U.combobox(root.querySelector('#varietyFilter'), {
+    items: S.store.index.varieta.map((v) => ({
+      value: v, label: v, sub: S.clonesOf(v).length + ' cloni',
+    })),
+    placeholder: 'Cerca varietà…',
+    value: varieta,
+    onPick: (value) => {
+      state.vitiVarieta = value;
+      state.vitiLimit = 60;
+      ctx.refresh();
+    },
+  });
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
     state.vitiSearch = e.target.value; state.vitiLimit = 60; ctx.refresh();
   }, 250));
+  root.querySelector('#resetViti').addEventListener('click', () => {
+    if (!state.vitiSearch && !state.vitiVarieta) return;
+    state.vitiSearch = '';
+    state.vitiVarieta = '';
+    state.vitiLimit = 60;
+    ctx.refresh();
+  });
   const more = root.querySelector('#more');
   if (more) more.addEventListener('click', () => { state.vitiLimit += 60; ctx.refresh(); });
 
@@ -622,13 +651,13 @@ export function viewViti(root, ctx) {
   root.querySelectorAll('[data-del-pair]').forEach((b) => {
     b.addEventListener('click', () => {
       const parts = b.dataset.delPair.split('|');
-      const varieta = parts[0], clone = parts[1];
+      const varietaSel = parts[0], clone = parts[1];
       U.confirmSheet({
         title: 'Eliminare la coppia?',
-        message: `${varieta} · ${clone}. Se è usata da lotti o impegni l'operazione verrà rifiutata.`,
+        message: `${varietaSel} · ${clone}. Se è usata da lotti o impegni l'operazione verrà rifiutata.`,
         confirmLabel: 'Elimina', danger: true,
         onConfirm: () => {
-          const res = S.deleteVitiPair(varieta, clone);
+          const res = S.deleteVitiPair(varietaSel, clone);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           U.toast('Coppia eliminata');
           ctx.refresh();

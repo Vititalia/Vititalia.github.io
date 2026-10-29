@@ -257,6 +257,31 @@ for (const [w, cols] of [[390, 2], [900, 3], [1440, 4]]) {
   await ctx.close();
 }
 
+/* anagrafica vite: a flat list with the variety filter, on PC and on a phone */
+for (const w of [390, 1440]) {
+  const { page, ctx } = await open({ width: w, height: 900 }, '#/anagrafiche/viti');
+  const v = await page.evaluate(() => {
+    const filterInput = document.querySelector('#varietyFilter input');
+    const rows = document.querySelectorAll('.grid tbody tr.trow');
+    const first = rows[0];
+    return {
+      groups: document.querySelectorAll('.grid tbody tr.group').length,
+      rows: rows.length,
+      filter: !!filterInput,
+      filterLabel: filterInput ? getComputedStyle(filterInput.parentElement.parentElement.previousElementSibling || filterInput).display : null,
+      rowDisplay: first ? getComputedStyle(first).display : null,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  ok(v.groups === 0, `${w}px vite: no group rows (${v.groups})`);
+  ok(v.rows > 0, `${w}px vite: rows rendered (${v.rows})`);
+  ok(v.filter, `${w}px vite: variety filter present`);
+  ok(v.rowDisplay === (w >= 760 ? 'table-row' : 'flex'),
+     `${w}px vite: ${w >= 760 ? 'table rows' : 'cards'} (${v.rowDisplay})`);
+  ok(v.overflow <= 1, `${w}px vite: no horizontal overflow`);
+  await ctx.close();
+}
+
 /* the grower filter highlights that grower's column */
 {
   const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/produttore?produttore=Mori%20Marco');

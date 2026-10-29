@@ -55,7 +55,7 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 | `#/dati/lotti` | Lotti magazzino | create, **edit and delete** lots; dependent variety → clone select |
 | `#/dati/ordini` | Ordini e impegni | create, **edit and delete**; inline *Spedito* toggle with undo; a lot is required |
 | `#/dati/import` | Import CSV | validate-then-write, per-row errors, exportable error report |
-| `#/anagrafiche/viti` | Anagrafica vite | one row per variety+clone pair, grouped by variety; create, **edit and delete** |
+| `#/anagrafiche/viti` | Anagrafica vite | one row per variety+clone pair (flat, sorted by variety then clone) with a searchable **Varietà** filter; create, **edit and delete** |
 | `#/anagrafiche/portainnesti` | Anagrafica portainnesto | code + usage count; create, **edit and delete** |
 | `#/config/utenti` | Utenti | invite, change role, block/unblock, reset password (Admin + Amministrazione) |
 | `#/config/permessi` | Ruoli e permessi | the matrix the app enforces (Admin only) |

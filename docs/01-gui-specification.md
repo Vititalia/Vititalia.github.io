@@ -1210,8 +1210,8 @@ App bar "Dati" + a centred card: lock icon, title "Inserimento dati disponibile 
 | Zone | Content |
 |---|---|
 | Toolbar | Search (matches variety or clone, case-insensitive), `Varietà` searchable filter, `Nuova varietà/clone` (primary), `Aggiungi in blocco` |
-| Grid | `Codice varietà` (mono) · `Codice clone` (mono) · `Utilizzi` (count of lots + orders referencing the pair) · `Stato` · actions |
-| Grouping | The grid is grouped by `codice_varieta`: a group header row reads "▦ CH-01 — 4 cloni" and the variety cell is printed once, on the first row of the group. The grouping is visual only; the underlying rows are pairs |
+| Filters | **Varietà** (searchable single-select over the 1 452 variety codes) and a **clone code** search box; `Azzera` clears both. The variety is a *filter*, not a grouping level (PD-5) |
+| Grid | `Codice clone` (mono) · `Codice varietà` (mono) · `Utilizzi` (count of lots + orders referencing the pair) · `Stato` · actions. One row per pair, sorted by variety then clone, 60 rows per page with «Mostra altri» |
 
 **Behaviours**
 
@@ -1228,6 +1228,7 @@ App bar "Dati" + a centred card: lock icon, title "Inserimento dati disponibile 
 - AC-2 A duplicate pair is rejected client-side before any write, naming the existing row.
 - AC-3 Deleting a referenced pair is impossible from the UI and rejected by the API.
 - AC-4 The `Utilizzi` count equals lots + orders for that pair, and recomputes after any delete attempt.
+- AC-6 The list is flat: no variety group headers. Choosing a variety keeps only that variety's pairs and the subtitle reads "n cloni di <varietà>"; `Azzera` restores the full list.
 - AC-5 Codes are trimmed and compared case-insensitively for duplicates, but stored exactly as typed.
 
 ---
@@ -1505,7 +1506,8 @@ Status after reconciling `docs/db-schema.sql`.
 | # | Decision | Rationale | Effect |
 |---|---|---|---|
 | **PD-3** | Report 1 keeps the flat list but **regains a subtotal row per rootstock** ("Totale per portainnesto", bold, tinted) and **drops the «Da spedire» column**; Tipologia and Produzione become **mandatory** filters with defaults | The office asked for the per-rootstock total back while keeping the filterable list; «Da spedire» duplicated a derived value and now has its own report; the two dimensions are not shown in the table, so they cannot be left ambiguous | Supersedes part of PD-1 |
-| **PD-4** | Report 2 **drops «Non attribuito» and «Totale produttori»**; every commitment is placed against a lot (the order form requires it) | Business rule: a record in stock always has a producer — a member or *Esterno* — so an unattributed bucket is a data error, not a column. The report warns if such data ever appears | Supersedes the PD-2 column set |
+| **PD-5** | **Anagrafica vite is no longer grouped by variety**: it is a flat list with a searchable **Varietà** filter (plus a clone search) | With 4 786 pairs the group headers made the screen long and hard to scan; a filter answers "show me this variety's clones" in one step, and the variety stays visible as a column | Supersedes the grouped layout of S-16 |
+| **PD-4** | Report 2 **drops «Non attribuito» e «Totale produttori»**; every commitment is placed against a lot (the order form requires it) | Business rule: a record in stock always has a producer — a member or *Esterno* — so an unattributed bucket is a data error, not a column. The report warns if such data ever appears | Supersedes the PD-2 column set |
 | **PD-2** | **Report 2 follows PD-1**: flat list, no rootstock grouping or subtotals, and two new filters — **Codice portainnesto** and **Produttore** | One consistent, filterable table shape across both reports; the grower filter answers "show me this grower's rows" in one choice and highlights the column instead of hiding the context | Supersedes the grouped/modified requirement for the per-grower report. Requirement R11 (role restriction) is unchanged |
 | **PD-1** | **Report 1 is no longer grouped by rootstock**: the rootstock is a filter and a column, and the only aggregate is the grand total | One flat list reads better on a phone and lets the office isolate a single rootstock in one tap instead of scrolling to its group; the per-grower report keeps the grouped/subtotal layout | Supersedes requirement R9's grouping/subtotal rule for Report 1. R10 (red negative rows) still holds. Report 2 is unchanged |
 

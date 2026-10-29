@@ -485,6 +485,45 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'registry reset clears the invite');
 }
 
+/* ---------------- anagrafica vite: flat list, variety is a filter ---------------- */
+{
+  await loginAs('ufficio');
+  await go('#/anagrafiche/viti');
+  const shape = {
+    groups: document.querySelectorAll('.grid tbody tr.group').length,
+    rows: document.querySelectorAll('.grid tbody tr.trow').length,
+    hasFilter: !!document.querySelector('#varietyFilter input'),
+    cols: [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim()),
+  };
+  ok(shape.groups === 0, `vite: no grouping by variety (${shape.groups} group rows)`);
+  ok(shape.rows > 0, `vite: flat rows rendered (${shape.rows})`);
+  ok(shape.hasFilter, 'vite: the variety filter is present');
+  ok(shape.cols.includes('Codice varietà'), `vite: the variety is a column (${shape.cols.join(' · ')})`);
+
+  /* pick a variety through the combobox */
+  const producerPair = storeMod.store.viti.find((v) => storeMod.usageOfPair(v.varieta, v.clone) > 0);
+  const combo = document.querySelector('#varietyFilter input');
+  combo.value = producerPair.varieta;
+  combo.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await wait(20);
+  const suggestion = document.querySelector('#varietyFilter + .combo-list button[data-i]')
+    || document.querySelector('.combo-list button[data-i]');
+  ok(!!suggestion, 'vite: the variety filter suggests values');
+  suggestion.click();
+  await wait(60);
+  const cells = [...document.querySelectorAll('.grid tbody tr.trow td[data-label="Codice varietà"]')]
+    .map((td) => td.textContent.trim());
+  ok(cells.length > 0, `vite: filtered rows (${cells.length})`);
+  ok(cells.every((c) => c === producerPair.varieta), 'vite: every row belongs to the filtered variety');
+  ok(text().includes('cloni di'), 'vite: the subtitle states the filtered variety');
+
+  /* reset brings the whole anagrafica back */
+  document.getElementById('resetViti').click();
+  await wait(60);
+  const afterReset = document.querySelectorAll('.grid tbody tr.trow').length;
+  ok(afterReset >= cells.length, `vite: reset restores the list (${afterReset})`);
+}
+
 /* ---------------- master data: add, edit, delete ---------------- */
 {
   await loginAs('ufficio');
