@@ -3,11 +3,6 @@ import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
 
-/** In the live backend the entry screens are read-only for now. */
-const WRITE_NOTICE = `<div class="banner banner-warn"><span aria-hidden="true">i</span>
-  <span>Modalità dati reali: la consultazione è attiva, l'inserimento e la modifica
-  saranno abilitati nella prossima release. Nessuna modifica viene salvata da qui.</span></div>`;
-
 const PAGE = 40;
 /* one search term per list: a filter typed on one page must not leak into another */
 const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', vitiSearch: '', vitiVarieta: '', rootsSearch: '', produttore: '' };
@@ -103,7 +98,6 @@ export function viewLotti(root, ctx) {
       ${S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Nuovo lotto</button>' : ''}
     </div></div>
 
-    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
         <label class="field" style="margin:0"><span>Cerca</span>
@@ -173,8 +167,8 @@ export function viewLotti(root, ctx) {
         title: 'Eliminare il lotto?',
         message: `${lot.anno} · ${lot.produttore || '—'} · ${lot.varieta} · ${lot.clone} · ${U.fmtQty(lot.quantita)}. L'operazione non è reversibile.`,
         confirmLabel: 'Elimina', danger: true,
-        onConfirm: () => {
-          const res = S.deleteLotto(lot.id);
+        onConfirm: async () => {
+          const res = await S.removeLotto(lot.id);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           U.toast('Lotto eliminato');
           ctx.refresh();
@@ -212,7 +206,7 @@ function openLottoForm(ctx, existing) {
     ],
     onMount: (sheet) => {
       wireVarietyClone(sheet, { varieta: existing && existing.varieta, clone: existing && existing.clone });
-      function submit() {
+      async function submit() {
         const form = sheet.querySelector('#lotForm');
         if (!form || !form.isConnected) return;
         const data = Object.fromEntries(new FormData(form).entries());
@@ -226,8 +220,13 @@ function openLottoForm(ctx, existing) {
           if (first) { first.setAttribute('aria-invalid', 'true'); first.focus(); }
           return;
         }
-        if (isEdit) S.updateLotto(existing.id, data);
-        else S.addLotto(data);
+        const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+        let res;
+        try { res = await S.saveLotto(data, isEdit ? existing.id : null); }
+        catch (e) { res = { ok: false, error: 'Errore di rete: ' + (e.message || e) }; }
+        if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Salva modifiche' : 'Salva'; }
+        if (!res.ok) { box.hidden = false; box.textContent = res.error; return; }
         U.closeSheet();
         U.toast(isEdit ? 'Lotto aggiornato' : 'Lotto salvato');
         ctx.refresh();
@@ -254,7 +253,6 @@ export function viewOrdini(root, ctx) {
       ${S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Nuovo impegno</button>' : ''}
     </div></div>
 
-    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="banner banner-info"><span aria-hidden="true">i</span>
       <span>Ogni impegno è collegato a un lotto (<code>id_magazzino</code>): è così che la quantità entra
       nella colonna del produttore nel riepilogo per produttore.</span></div>
@@ -286,12 +284,18 @@ export function viewOrdini(root, ctx) {
     })}</div>`;
 
   root.querySelectorAll('[data-toggle]').forEach((b) => {
-    b.addEventListener('click', () => {
-      const res = S.toggleSpedito(b.dataset.toggle);
-      if (!res) return;
+    b.addEventListener('click', async () => {
+      const id = b.dataset.toggle;
+      const ord = S.store.ordini.find((o) => o.id === id);
+      if (!ord) return;
+      const previous = !!ord.spedito;
+      b.disabled = true;
+      const res = await S.setSpedito(id, !previous);
+      b.disabled = false;
+      if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
       ctx.refresh();
-      U.toast(res.ordine.spedito ? 'Impegno segnato come spedito' : 'Spedizione annullata', {
-        action: { label: 'Annulla', run: () => { S.toggleSpedito(res.ordine.id, res.prev); ctx.refresh(); } },
+      U.toast(!previous ? 'Impegno segnato come spedito' : 'Spedizione annullata', {
+        action: { label: 'Annulla', run: async () => { await S.setSpedito(id, previous); ctx.refresh(); } },
       });
     });
   });
@@ -309,8 +313,9 @@ export function viewOrdini(root, ctx) {
         title: 'Eliminare l\'impegno?',
         message: `${ord.varieta} · ${ord.clone} · ${ord.portainnesto} · ${U.fmtQty(ord.quantita)}. L'operazione non è reversibile.`,
         confirmLabel: 'Elimina', danger: true,
-        onConfirm: () => {
-          S.deleteOrdine(ord.id);
+        onConfirm: async () => {
+          const res = await S.removeOrdine(ord.id);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           U.toast('Impegno eliminato');
           ctx.refresh();
         },
@@ -403,7 +408,7 @@ function openOrdineForm(ctx, existing) {
           ? `<div class="banner banner-warn"><span aria-hidden="true">⚠</span><span>Disponibilità andrà sotto zero: da ${U.fmtSigned(before)} a <b>${U.fmtSigned(after)}</b>. Verrà segnalata in Indisponibilità.</span></div>`
           : '';
       }
-      function submit() {
+      async function submit() {
         if (!form || !form.isConnected) return;
         const data = Object.fromEntries(new FormData(form).entries());
         data.spedito = form.elements.spedito.checked;
@@ -416,8 +421,13 @@ function openOrdineForm(ctx, existing) {
           box.textContent = keys.map((k) => errs[k]).join(' ');
           return;
         }
-        if (isEdit) S.updateOrdine(existing.id, data);
-        else S.addOrdine(data);
+        const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+        let res;
+        try { res = await S.saveOrdine(data, isEdit ? existing.id : null); }
+        catch (e) { res = { ok: false, error: 'Errore di rete: ' + (e.message || e) }; }
+        if (btn) { btn.disabled = false; btn.textContent = isEdit ? 'Salva modifiche' : 'Salva'; }
+        if (!res.ok) { box.hidden = false; box.textContent = res.error; return; }
         U.closeSheet();
         U.toast(isEdit ? 'Impegno aggiornato' : 'Impegno salvato');
         ctx.refresh();
@@ -495,12 +505,19 @@ export function viewImport(root, ctx) {
       })}</div>` : `<div class="banner banner-ok"><span aria-hidden="true">✓</span><span>Tutte le righe sono valide.</span></div>`}`;
 
     const apply = out.querySelector('#apply');
-    if (apply) apply.addEventListener('click', () => {
-      r.valid.forEach((row) => {
-        if (kind === 'lotti') S.addLotto(row);
-        else S.addOrdine(row);
-      });
-      U.toast(`Importate ${r.valid.length} righe`);
+    if (apply) apply.addEventListener('click', async () => {
+      apply.disabled = true;
+      apply.textContent = 'Importazione…';
+      let res;
+      try { res = await S.importRows(kind, r.valid); }
+      catch (e) { res = { ok: false, error: 'Errore di rete: ' + (e.message || e) }; }
+      if (!res.ok) {
+        apply.disabled = false;
+        apply.textContent = `Importa ${U.fmtQty(r.valid.length)} righe`;
+        U.toast(res.error, { tone: 'error', ms: 9000 });
+        return;
+      }
+      U.toast(`Importate ${U.fmtQty(res.count)} righe`);
       ctx.navigate(kind === 'lotti' ? '#/dati/lotti' : '#/dati/ordini');
     });
     const errCsv = out.querySelector('#errCsv');
@@ -620,7 +637,6 @@ export function viewViti(root, ctx) {
     <div class="spacer"></div>
     <div class="row">${P.can(ctx.role, 'anag.viti') && S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Varietà / clone</button>' : ''}</div></div>
 
-    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
         <div class="field" style="margin:0">
@@ -688,8 +704,8 @@ export function viewViti(root, ctx) {
         title: 'Eliminare la coppia?',
         message: `${varietaSel} · ${clone}. Se è usata da lotti o impegni l'operazione verrà rifiutata.`,
         confirmLabel: 'Elimina', danger: true,
-        onConfirm: () => {
-          const res = S.deleteVitiPair(varietaSel, clone);
+        onConfirm: async () => {
+          const res = await S.removeVitiPair(varietaSel, clone);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           U.toast('Coppia eliminata');
           ctx.refresh();
@@ -725,12 +741,19 @@ function openPairForm(ctx, existing) {
       });
       const input = sheet.querySelector('[data-variety] input');
       input.addEventListener('input', () => { varieta = input.value; });
-      function submit() {
+      async function submit() {
         const clone = sheet.querySelector('[name="clone"]').value;
         const name = (varieta || input.value || '').trim();
-        const res = isEdit
-          ? S.updateVitiPair({ varieta: existing.varieta, clone: existing.clone }, { varieta: name, clone })
-          : S.addVitiPair(name, clone);
+        const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+        let res;
+        try {
+          res = await S.saveVitiPair(
+            isEdit ? { varieta: existing.varieta, clone: existing.clone } : null,
+            { varieta: name, clone },
+          );
+        } catch (e) { res = { ok: false, error: 'Errore di rete: ' + (e.message || e) }; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Salva'; }
         const err = sheet.querySelector('#vitiErr');
         if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
         U.closeSheet();
@@ -755,7 +778,6 @@ export function viewPortainnesti(root, ctx) {
     <div class="spacer"></div>
     <div class="row">${P.can(ctx.role, 'anag.portainnesti') && S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Portainnesto</button>' : ''}</div></div>
 
-    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="card card-pad mb">
       <label class="field" style="margin:0"><span>Cerca codice</span>
         <input type="search" id="q" value="${U.esc(state.rootsSearch)}" placeholder="es. 1103"></label>
@@ -798,8 +820,8 @@ export function viewPortainnesti(root, ctx) {
         title: 'Eliminare il portainnesto?',
         message: `${code}. Se è usato da lotti o impegni l'operazione verrà rifiutata.`,
         confirmLabel: 'Elimina', danger: true,
-        onConfirm: () => {
-          const res = S.deletePortainnesto(code);
+        onConfirm: async () => {
+          const res = await S.removePortainnesto(code);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           U.toast('Portainnesto eliminato');
           ctx.refresh();
@@ -824,9 +846,14 @@ function openRootForm(ctx, existing) {
       { label: 'Salva', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
     ],
     onMount: (sheet) => {
-      function submit() {
+      async function submit() {
         const code = sheet.querySelector('[name="code"]').value;
-        const res = existing ? S.renamePortainnesto(existing, code) : S.addPortainnesto(code);
+        const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+        let res;
+        try { res = await S.savePortainnesto(existing || null, code); }
+        catch (e) { res = { ok: false, error: 'Errore di rete: ' + (e.message || e) }; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Salva'; }
         const err = sheet.querySelector('#rootErr');
         if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
         U.closeSheet();

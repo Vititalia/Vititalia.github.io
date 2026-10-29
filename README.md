@@ -112,14 +112,14 @@ against the live database and real logins; with nothing configured it falls back
 |---|---|---|
 | Login | Supabase Auth (e-mail + password), role read from `profiles` | the four demo accounts |
 | Data | the real tables for staff, the report views for produttore/vendite | `data/snapshot.json` (synthetic quantities) |
-| Writes | **not wired yet** — entry screens show a read-only notice | create / edit / delete, stored in the browser |
+| Writes | **create / edit / delete straight into the database** (PostgREST, `staff_write` policies; a non-staff session is refused by RLS) | create / edit / delete, stored in the browser |
 | Users screen | lists `profiles`, assigns roles (invite/reset need the dashboard) | full lifecycle |
 
 ## Data
 
 The published demo ships **real structure with synthetic quantities** — variety/clone/rootstock codes
 and the eight member-grower names are real, but commercial figures are perturbed and are not the
-company's real numbers. The app also keeps any local edit in `localStorage` (nothing is sent anywhere):
+company's real numbers. In the demo backend the app keeps any local edit in `localStorage` (nothing is sent anywhere); in live mode every change is written to the database:
 
 - **Specifica GUI:** [`docs/01-gui-specification.md`](docs/01-gui-specification.md)
 - **Mockup draw.io (10 pages):** [`docs/mockups/fede-magazzino-mockup.drawio`](docs/mockups/fede-magazzino-mockup.drawio)
@@ -195,9 +195,11 @@ cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
 
 ## Known limitations / next steps
 
-- Writes are local (`localStorage`), because Pages is static: lots, orders, master data and users are
-  created/edited/deleted in the browser. A real deployment needs the API behind those screens; the
-  store and `auth.js` layers are the only places that would change.
+- Writes go straight from the browser to PostgREST (`js/store.js`, `saveLotto`/`saveOrdine`/…), which
+  is safe because RLS decides: the `staff_write` policies allow Amministratore and Amministrazione only,
+  and every write is validated again by the database (checks on tipologia/produzione, the
+  `valida_varieta_clone()` trigger, the unique keys). Users screen writes go through the staff-only RPCs.
+  In demo mode the same API writes to the browser overlay instead.
 - Every commitment is now placed against a lot (the order form requires it, and the demo snapshot
   links each order to a lot with the same dimensions), so no quantity is left unattributed. The
   per-grower report still warns if the data ever contains an order without a lot.

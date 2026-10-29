@@ -78,7 +78,9 @@ export async function init(role) {
 }
 
 /** True when entry/editing is wired for the active backend. */
-export const canWrite = () => store.mode !== 'supabase';
+/* Writes are always wired: in demo mode they land in the browser overlay, in
+ * live mode in the database, where RLS refuses anyone who is not staff. */
+export const canWrite = () => true;
 export const isStaffRole = (role) => role === 'admin' || role === 'ufficio';
 
 async function fetchAll(c, table, select, size = 1000) {
@@ -867,6 +869,278 @@ export function deletePortainnesto(code) {
   store.portainnesti = store.portainnesti.filter((x) => x !== code);
   rebuild();
   return { ok: true };
+}
+
+/* ------------------------------------------------ asynchronous writes (UI)
+ * The screens call these and await them: demo mode delegates to the local
+ * mutators above, live mode talks to PostgREST and patches the in-memory store
+ * with the row the database returned. RLS is the authority on who may write
+ * (`staff_write` policies on all four tables). */
+
+export const liveWrites = () => store.mode === 'supabase';
+
+/** Postgres error → an Italian sentence the office can act on. */
+function pgMessage(error) {
+  if (!error) return 'Operazione non riuscita.';
+  const msg = String(error.message || error);
+  if (error.code === '23505') return 'Esiste già un elemento con questi valori.';
+  if (error.code === '23503') return 'Il record è collegato ad altri dati: rimuovi prima quelli.';
+  if (error.code === '23514') return 'Valore non ammesso dai controlli del database.';
+  if (error.code === '42501' || /row-level security|permesso negato/i.test(msg)) {
+    return 'Non hai i permessi per questa modifica.';
+  }
+  return msg;                                  // P0001 raises are already Italian
+}
+
+const firstError = (errs) => Object.values(errs)[0] || 'Dati non validi.';
+
+const lotRow = (v) => ({
+  tipologia: v.tipologia || null,
+  produzione: v.produzione || null,
+  codice_varieta: v.varieta,
+  codice_clone: v.clone,
+  codice_portainnesto: v.portainnesto,
+  produttore: v.produttore || null,
+  anno_conferimento: Number(v.anno),
+  quantita: Number(v.quantita) || 0,
+  note: v.note || null,
+});
+const mapLotto = (r) => ({
+  id: r.id, anno: r.anno_conferimento, produttore: r.produttore,
+  tipologia: r.tipologia, produzione: r.produzione, varieta: r.codice_varieta,
+  clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+  quantita: r.quantita, note: r.note, local: false,
+});
+
+const ordineRow = (v) => ({
+  id_magazzino: v.id_magazzino || null,
+  tipologia: v.tipologia,
+  produzione: v.produzione,
+  codice_varieta: v.varieta,
+  codice_clone: v.clone,
+  codice_portainnesto: v.portainnesto,
+  quantita: Number(v.quantita),
+  spedito: !!v.spedito,
+  note: v.note || null,
+});
+const mapOrdine = (r) => ({
+  id: r.id, id_magazzino: r.id_magazzino, tipologia: r.tipologia, produzione: r.produzione,
+  varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+  quantita: r.quantita, spedito: !!r.spedito, note: r.note, local: false,
+});
+
+async function client() {
+  const c = await supabaseClient();
+  if (!c) throw new Error('Backend non disponibile.');
+  return c;
+}
+
+/* ---- lotti ---- */
+export async function saveLotto(values, existingId) {
+  const errs = validateLotto(values);
+  if (Object.keys(errs).length) return { ok: false, error: firstError(errs), errors: errs };
+  if (!liveWrites()) {
+    if (existingId) return { ok: true, lot: updateLotto(existingId, values) };
+    return { ok: true, lot: addLotto(values) };
+  }
+  const c = await client();
+  const q = existingId
+    ? c.from('lotti_magazzino').update(lotRow(values)).eq('id', existingId).select().single()
+    : c.from('lotti_magazzino').insert(lotRow(values)).select().single();
+  const { data, error } = await q;
+  if (error) return { ok: false, error: pgMessage(error) };
+  const lot = mapLotto(data);
+  const i = store.lotti.findIndex((l) => l.id === lot.id);
+  if (i >= 0) store.lotti[i] = lot; else store.lotti.push(lot);
+  rebuild();
+  return { ok: true, lot };
+}
+
+export async function removeLotto(id) {
+  const refs = ordersOfLotto(id);
+  if (refs.length) {
+    return { ok: false, error: `Impossibile eliminare: ${refs.length} impegno/i puntano a questo lotto.` };
+  }
+  if (!liveWrites()) return deleteLotto(id);
+  const c = await client();
+  const { error } = await c.from('lotti_magazzino').delete().eq('id', id);
+  if (error) return { ok: false, error: pgMessage(error) };
+  store.lotti = store.lotti.filter((l) => l.id !== id);
+  rebuild();
+  return { ok: true };
+}
+
+/* ---- ordini ---- */
+export async function saveOrdine(values, existingId) {
+  const errs = validateOrdine(values);
+  if (!values.id_magazzino) errs.id_magazzino = 'Collega l\'impegno a un lotto.';
+  if (Object.keys(errs).length) return { ok: false, error: firstError(errs), errors: errs };
+  if (!liveWrites()) {
+    if (existingId) return { ok: true, ordine: updateOrdine(existingId, values) };
+    return { ok: true, ordine: addOrdine(values) };
+  }
+  const c = await client();
+  const q = existingId
+    ? c.from('ordini_impegni').update(ordineRow(values)).eq('id', existingId).select().single()
+    : c.from('ordini_impegni').insert(ordineRow(values)).select().single();
+  const { data, error } = await q;
+  if (error) return { ok: false, error: pgMessage(error) };
+  const ordine = mapOrdine(data);
+  const i = store.ordini.findIndex((o) => o.id === ordine.id);
+  if (i >= 0) store.ordini[i] = ordine; else store.ordini.push(ordine);
+  rebuild();
+  return { ok: true, ordine };
+}
+
+export async function removeOrdine(id) {
+  if (!liveWrites()) return deleteOrdine(id);
+  const c = await client();
+  const { error } = await c.from('ordini_impegni').delete().eq('id', id);
+  if (error) return { ok: false, error: pgMessage(error) };
+  store.ordini = store.ordini.filter((o) => o.id !== id);
+  rebuild();
+  return { ok: true };
+}
+
+/** Set the shipped flag explicitly (no toggle arithmetic in the views). */
+export async function setSpedito(id, value) {
+  if (!liveWrites()) {
+    const r = toggleSpedito(id, value);
+    if (!r) return { ok: false, error: 'Impegno non trovato.' };
+    return { ok: true, ordine: r.ordine, prev: r.prev };
+  }
+  const c = await client();
+  const { data, error } = await c.from('ordini_impegni')
+    .update({ spedito: !!value }).eq('id', id).select().single();
+  if (error) return { ok: false, error: pgMessage(error) };
+  const ordine = mapOrdine(data);
+  const i = store.ordini.findIndex((o) => o.id === ordine.id);
+  if (i >= 0) store.ordini[i] = ordine;
+  rebuild();
+  return { ok: true, ordine };
+}
+
+/* ---- anagrafica vite ---- */
+/** A free human-readable id (`ABC0001`) for a new pair, like the existing rows. */
+async function nextPairId(c, varieta) {
+  const prefix = (String(varieta).normalize('NFD').replace(/[^A-Za-z]/g, '').toUpperCase() + 'XXX').slice(0, 3);
+  const { data } = await c.from('anagrafica_vite').select('id').like('id', prefix + '%');
+  let max = 0;
+  for (const row of data || []) {
+    const n = Number(String(row.id).slice(3));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return prefix + String(max + 1).padStart(4, '0');
+}
+
+export async function saveVitiPair(from, to) {
+  const varieta = String(to.varieta || '').trim();
+  const clone = String(to.clone || '').trim();
+  if (!varieta || !clone) return { ok: false, error: 'Varietà e clone sono obbligatori.' };
+  if (!liveWrites()) {
+    return from ? updateVitiPair(from, { varieta, clone }) : addVitiPair(varieta, clone);
+  }
+  if (from) {
+    const used = usageOfPair(from.varieta, from.clone);
+    if (used) return { ok: false, error: `Non modificabile: ${used} record usano questa coppia.` };
+  }
+  const c = await client();
+  const { data, error } = from
+    ? await c.from('anagrafica_vite')
+      .update({ codice_varieta: varieta, codice_clone: clone })
+      .eq('codice_varieta', from.varieta).eq('codice_clone', from.clone)
+      .select()
+    : await c.from('anagrafica_vite')
+      .insert({ id: await nextPairId(c, varieta), codice_varieta: varieta, codice_clone: clone })
+      .select();
+  if (error) return { ok: false, error: pgMessage(error) };
+  if (!data || !data.length) return { ok: false, error: 'Nessuna riga aggiornata: la coppia non esiste più.' };
+  if (from) {
+    const row = store.viti.find((x) => x.varieta === from.varieta && x.clone === from.clone);
+    if (row) { row.varieta = varieta; row.clone = clone; }
+  } else {
+    store.viti.push({ varieta, clone });
+  }
+  rebuild();
+  return { ok: true, pair: { varieta, clone } };
+}
+
+export async function removeVitiPair(varieta, clone) {
+  if (!liveWrites()) return deleteVitiPair(varieta, clone);
+  const used = usageOfPair(varieta, clone);
+  if (used) return { ok: false, error: `Impossibile eliminare: ${used} record usano questa coppia.` };
+  const c = await client();
+  const { error } = await c.from('anagrafica_vite')
+    .delete().eq('codice_varieta', varieta).eq('codice_clone', clone);
+  if (error) return { ok: false, error: pgMessage(error) };
+  store.viti = store.viti.filter((x) => !(x.varieta === varieta && x.clone === clone));
+  rebuild();
+  return { ok: true };
+}
+
+/* ---- anagrafica portainnesto ---- */
+export async function savePortainnesto(from, to) {
+  const code = String(to || '').trim();
+  if (!code) return { ok: false, error: 'Il codice è obbligatorio.' };
+  if (!liveWrites()) {
+    return from ? renamePortainnesto(from, code) : addPortainnesto(code);
+  }
+  if (from) {
+    const used = usageOfRootstock(from);
+    if (used) return { ok: false, error: `Non modificabile: ${used} record usano questo portainnesto.` };
+  }
+  const c = await client();
+  const { data, error } = from
+    ? await c.from('anagrafica_portainnesto')
+      .update({ codice_portainnesto: code }).eq('codice_portainnesto', from).select()
+    : await c.from('anagrafica_portainnesto').insert({ codice_portainnesto: code }).select();
+  if (error) return { ok: false, error: pgMessage(error) };
+  if (!data || !data.length) return { ok: false, error: 'Nessuna riga aggiornata: il codice non esiste più.' };
+  if (from) {
+    const j = store.portainnesti.indexOf(from);
+    if (j >= 0) store.portainnesti[j] = code; else store.portainnesti.push(code);
+  } else {
+    store.portainnesti.push(code);
+  }
+  rebuild();
+  return { ok: true, code };
+}
+
+export async function removePortainnesto(code) {
+  if (!liveWrites()) return deletePortainnesto(code);
+  const used = usageOfRootstock(code);
+  if (used) return { ok: false, error: `Impossibile eliminare: ${used} record usano questo portainnesto.` };
+  const c = await client();
+  const { error } = await c.from('anagrafica_portainnesto')
+    .delete().eq('codice_portainnesto', code);
+  if (error) return { ok: false, error: pgMessage(error) };
+  store.portainnesti = store.portainnesti.filter((x) => x !== code);
+  rebuild();
+  return { ok: true };
+}
+
+/**
+ * CSV import: one request in live mode (a single INSERT of every valid row),
+ * sequential local writes in demo mode. Either all rows land or none.
+ */
+export async function importRows(kind, rows) {
+  if (!rows || !rows.length) return { ok: true, count: 0 };
+  if (!liveWrites()) {
+    rows.forEach((r) => (kind === 'lotti' ? addLotto(r) : addOrdine(r)));
+    return { ok: true, count: rows.length };
+  }
+  const c = await client();
+  const payload = rows.map(kind === 'lotti' ? lotRow : ordineRow);
+  const { data, error } = kind === 'lotti'
+    ? await c.from('lotti_magazzino').insert(payload).select()
+    : await c.from('ordini_impegni').insert(payload).select();
+  if (error) return { ok: false, error: pgMessage(error) };
+  for (const row of data || []) {
+    if (kind === 'lotti') store.lotti.push(mapLotto(row));
+    else store.ordini.push(mapOrdine(row));
+  }
+  rebuild();
+  return { ok: true, count: (data || []).length };
 }
 
 /* ------------------------------------------------------------- CSV out */

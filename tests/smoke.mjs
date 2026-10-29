@@ -711,6 +711,67 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await auth.resetRegistry();
 }
 
+/* ---------------- the async write API the screens use (demo backend) ---------------- */
+{
+  const S4 = await import('../js/store.js');
+  const lot = S4.store.lotti.find((l) => l.portainnesto && l.varieta);
+  const before = S4.store.lotti.length;
+  const made = await S4.saveLotto({
+    anno: '2026', produttore: lot.produttore, tipologia: lot.tipologia, produzione: lot.produzione,
+    varieta: lot.varieta, clone: lot.clone, portainnesto: lot.portainnesto, quantita: 99, note: 'api test',
+  }, null);
+  ok(made.ok && S4.store.lotti.length === before + 1, 'saveLotto creates a new lot (demo)');
+  const edited = await S4.saveLotto({
+    anno: '2026', produttore: lot.produttore, tipologia: lot.tipologia, produzione: lot.produzione,
+    varieta: lot.varieta, clone: lot.clone, portainnesto: lot.portainnesto, quantita: 123, note: 'api test',
+  }, made.lot.id);
+  ok(edited.ok && S4.store.lotti.filter((l) => l.note === 'api test').length === 1,
+     'saveLotto updates the same row instead of creating another');
+  const bad = await S4.saveLotto({ anno: '20', quantita: -1 }, null);
+  ok(!bad.ok && !!bad.error, 'saveLotto refuses invalid values before writing', bad.error);
+
+  const ord = await S4.saveOrdine({
+    id_magazzino: made.lot.id, tipologia: lot.tipologia, produzione: lot.produzione,
+    varieta: lot.varieta, clone: lot.clone, portainnesto: lot.portainnesto, quantita: 5,
+    spedito: false, note: 'api ordine',
+  }, null);
+  ok(ord.ok && ord.ordine.id_magazzino === made.lot.id, 'saveOrdine links the order to its lot (demo)');
+  const noLot = await S4.saveOrdine({ tipologia: 'x', produzione: 'y', varieta: 'z', clone: 'c', portainnesto: 'r', quantita: 1 }, null);
+  ok(!noLot.ok, 'saveOrdine refuses an order without a lot');
+  const guard = await S4.removeLotto(made.lot.id);
+  ok(!guard.ok && /impegno/i.test(guard.error), 'removeLotto refuses a lot an order points at');
+
+  const shipped = await S4.setSpedito(ord.ordine.id, true);
+  ok(shipped.ok && shipped.ordine.spedito === true, 'setSpedito sets the flag explicitly (demo)');
+  const unshipped = await S4.setSpedito(ord.ordine.id, false);
+  ok(unshipped.ok && unshipped.ordine.spedito === false, 'setSpedito can revert it');
+
+  await S4.removeOrdine(ord.ordine.id);
+  const removed = await S4.removeLotto(made.lot.id);
+  ok(removed.ok && !S4.store.lotti.some((l) => l.note === 'api test'), 'the test lot and order are removed');
+
+  const pair = await S4.saveVitiPair(null, { varieta: lot.varieta, clone: 'API-TEST' });
+  ok(pair.ok, 'saveVitiPair creates a pair');
+  ok((await S4.saveVitiPair({ varieta: lot.varieta, clone: 'API-TEST' }, { varieta: lot.varieta, clone: 'API-TEST-2' })).ok,
+     'an unused pair can be renamed');
+  ok((await S4.removeVitiPair(lot.varieta, 'API-TEST-2')).ok, 'and deleted again');
+
+  const root = await S4.savePortainnesto(null, '9999 API ROOT');
+  ok(root.ok, 'savePortainnesto creates a rootstock');
+  ok((await S4.savePortainnesto('9999 API ROOT', '9999 API ROOT 2')).ok, 'an unused rootstock can be renamed');
+  ok((await S4.removePortainnesto('9999 API ROOT 2')).ok, 'and deleted again');
+
+  const lotsBefore = S4.store.lotti.length;
+  const imp = await S4.importRows('lotti', [1, 2, 3].map((n) => ({
+    anno: '2026', produttore: lot.produttore, tipologia: lot.tipologia, produzione: lot.produzione,
+    varieta: lot.varieta, clone: lot.clone, portainnesto: lot.portainnesto, quantita: n, note: 'import test',
+  })));
+  ok(imp.ok && imp.count === 3 && S4.store.lotti.length === lotsBefore + 3, 'importRows writes every valid row');
+  // remove exactly what this block created; later blocks rely on the rest of the store
+  for (const l of S4.store.lotti.filter((x) => x.note === 'import test')) await S4.removeLotto(l.id);
+  ok(S4.store.lotti.length === lotsBefore, 'the imported rows are removed again');
+}
+
 /* ---------------- anagrafica vite: flat list, variety is a filter ---------------- */
 {
   await loginAs('ufficio');
@@ -827,7 +888,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   delBtn.click();
   await wait(30);
   document.querySelector('.sheet-actions [data-act="1"]').click();
-  await wait(40);
+  await wait(60);
   ok(!storeMod.store.lotti.some((l) => l.id === first.id), 'the lot is deleted');
 
   /* a lot referenced by an order cannot be deleted */
