@@ -312,14 +312,109 @@ export async function setGrower(id, grower) {
   return { ok: true };
 }
 
+/* ---- optional e-mail delivery through the `send-credentials` Edge Function ----
+ * The function calls the same SECURITY DEFINER RPCs **with the caller's token**, so
+ * the role check stays in the database. When it is not deployed the client falls
+ * back to the plain RPC and the administrator hands the password over by hand. */
+let credentialsFnMissing = false;
+const passwordLooksSafe = (pw) => typeof pw === 'string' && /^[\x21-\x7e]{6,64}$/.test(pw);
+
+export const credentialsEmailAvailable = () => backend() === 'supabase' && !credentialsFnMissing;
+
+/**
+ * One safe probe (the function answers `action: 'probe'` without touching an
+ * account), so the Utenti screen only offers the e-mail option when the Edge
+ * Function is actually deployed. Cached for the session.
+ */
+let credentialsProbe = null;
+export async function ensureCredentialsEmail() {
+  if (backend() !== 'supabase' || credentialsFnMissing) {
+    credentialsFnMissing = true;
+    return false;
+  }
+  if (!credentialsProbe) {
+    credentialsProbe = (async () => {
+      try {
+        const c = await sb();
+        const { error } = await c.functions.invoke('send-credentials', { body: { action: 'probe' } });
+        if (error) {
+          const status = (error.context && error.context.status) || error.status || 0;
+          if (status === 404 || status === 0) { credentialsFnMissing = true; return false; }
+        }
+        return true;
+      } catch {
+        credentialsFnMissing = true;
+        return false;
+      }
+    })();
+  }
+  return credentialsProbe;
+}
+
+async function functionErrorMessage(error) {
+  const ctx = error && error.context;
+  if (ctx && typeof ctx.clone === 'function') {
+    try {
+      const body = await ctx.clone().json();
+      if (body && body.error) return italian(String(body.error));
+    } catch { /* not JSON */ }
+  }
+  return italian((error && error.message) || 'Funzione non disponibile');
+}
+
+/**
+ * `action: 'create' | 'reset'` creates/resets the account and e-mails the one-time
+ * password; `action: 'resend'` only re-sends a password already on screen.
+ */
+export async function emailCredentials({ action = 'create', email, name, role, grower, password }) {
+  if (backend() === 'demo') {
+    return { ok: false, notDeployed: true, error: 'Non disponibile in modalità dimostrativa.' };
+  }
+  const c = await sb();
+  let data = null;
+  let error = null;
+  try {
+    ({ data, error } = await c.functions.invoke('send-credentials', {
+      body: { action, email, name, role, grower: grower || null, password: password || null },
+    }));
+  } catch {
+    credentialsFnMissing = true;
+    return { ok: false, notDeployed: true, error: 'Funzione e-mail non configurata.' };
+  }
+  if (error) {
+    const status = (error.context && error.context.status) || error.status || 0;
+    if (status === 404 || status === 0) {
+      credentialsFnMissing = true;
+      return { ok: false, notDeployed: true, error: 'Funzione e-mail non configurata.' };
+    }
+    return { ok: false, error: await functionErrorMessage(error) };
+  }
+  if (!data || data.error) {
+    return { ok: false, error: italian((data && data.error) || 'Risposta non valida') };
+  }
+  return { ok: true, ...data };
+}
+
 /**
  * Create a user. Live: the `create_user` RPC (SECURITY DEFINER, staff-only) returns
- * a one-time temporary password. Demo: the local registry.
+ * a one-time temporary password; with `viaEmail` the Edge Function also mails it.
+ * Demo: the local registry.
  */
-export async function createUser({ email, name, role, grower }) {
+export async function createUser({ email, name, role, grower, viaEmail = false }) {
   if (backend() === 'demo') {
     const res = demoInviteUser({ email, name, role, grower });
     return res.ok ? { ok: true, user: res.user, password: res.password } : res;
+  }
+  if (viaEmail && !credentialsFnMissing) {
+    const res = await emailCredentials({ action: 'create', email, name, role, grower });
+    if (res.ok) {
+      await refreshUsers();
+      return {
+        ok: true, user: { email, role }, password: res.password,
+        mail: { sent: !!res.email_sent, error: res.mail_error || null, provider: res.provider || null },
+      };
+    }
+    if (!res.notDeployed) return res;          // real refusal (role, e-mail format, …)
   }
   const c = await sb();
   const { data, error } = await c.rpc('create_user', {
@@ -328,17 +423,39 @@ export async function createUser({ email, name, role, grower }) {
   if (error) return { ok: false, error: italian(error.message) };
   const row = Array.isArray(data) ? data[0] : data;
   await refreshUsers();
-  return { ok: true, user: { email: row.email, role }, password: row.temp_password };
+  return {
+    ok: true, user: { email: row.email, role }, password: row.temp_password,
+    mail: viaEmail ? { sent: false, error: 'Funzione e-mail non configurata sul progetto.' } : null,
+  };
 }
 
 /** Reset a password: `user` is the row from listUsers(). */
-export async function resetPassword(user) {
+export async function resetPassword(user, { viaEmail = false } = {}) {
   if (backend() === 'demo') return demoResetPassword(user.id);
+  if (viaEmail && !credentialsFnMissing) {
+    const res = await emailCredentials({ action: 'reset', email: user.email });
+    if (res.ok) {
+      return {
+        ok: true, password: res.password, user,
+        mail: { sent: !!res.email_sent, error: res.mail_error || null, provider: res.provider || null },
+      };
+    }
+    if (!res.notDeployed) return res;
+  }
   const c = await sb();
   const { data, error } = await c.rpc('reset_user_password', { p_email: user.email });
   if (error) return { ok: false, error: italian(error.message) };
   const row = Array.isArray(data) ? data[0] : data;
-  return { ok: true, password: row.temp_password, user };
+  return {
+    ok: true, password: row.temp_password, user,
+    mail: viaEmail ? { sent: false, error: 'Funzione e-mail non configurata sul progetto.' } : null,
+  };
+}
+
+/** Re-send a password that is already on screen (no new password is issued). */
+export async function resendCredentialsEmail({ email, name, role, password }) {
+  if (!passwordLooksSafe(password)) return { ok: false, error: 'Password non valida.' };
+  return emailCredentials({ action: 'resend', email, name, role, password });
 }
 
 /** Remove an account (administrators only, enforced by the RPC). */

@@ -947,7 +947,9 @@ export function viewUtenti(root, ctx) {
 
   let submitFn = null;
   const inviteBtn = root.querySelector('#inviteBtn');
-  if (inviteBtn) inviteBtn.addEventListener('click', () => {
+  if (inviteBtn) inviteBtn.addEventListener('click', async () => {
+    // one cached probe: is the send-credentials Edge Function deployed?
+    const canEmail = await A.ensureCredentialsEmail();
     U.openSheet({
       title: 'Invita utente',
       body: `<form id="inviteForm" novalidate>
@@ -960,6 +962,11 @@ export function viewUtenti(root, ctx) {
             <option value="">—</option>
             ${S.store.meta.produttori.map((g) => `<option value="${U.esc(g)}">${U.esc(g)}</option>`).join('')}
           </select></label>
+          ${canEmail ? `<label class="field check-field">
+            <input type="checkbox" name="viaEmail" value="1" checked>
+            <span>Invia la password all'indirizzo indicato</span></label>
+            <p class="hint">La password temporanea parte subito per email; resterà visibile una sola volta
+            in questa schermata, come promemoria.</p>` : ''}
           <p class="field-error" id="inviteErr" hidden></p>
         </form>`,
       actions: [
@@ -980,6 +987,7 @@ export function viewUtenti(root, ctx) {
             email: form.elements.email.value,
             role: form.elements.role.value,
             grower: form.elements.grower.value,
+            viaEmail: !!(form.elements.viaEmail && form.elements.viaEmail.checked),
           };
           let res;
           try { res = await A.createUser(payload); }
@@ -993,7 +1001,8 @@ export function viewUtenti(root, ctx) {
           ctx.refresh();
           showPassword(`Utente creato: ${payload.name || res.user.email}`,
             'Password temporanea: comunicala all\'interessato, non sarà più visibile.', res.password,
-            A.backend() === 'supabase' ? payload.email : null);
+            A.backend() === 'supabase' ? payload.email : null,
+            { mail: res.mail, name: payload.name, role: payload.role });
         }
         submitFn = submit;
       },
@@ -1043,11 +1052,12 @@ export function viewUtenti(root, ctx) {
         message: `Verrà generata una password temporanea per ${u.name}.`,
         confirmLabel: 'Genera password',
         onConfirm: async () => {
-          const res = await A.resetPassword(u);
+          const res = await A.resetPassword(u, { viaEmail: A.credentialsEmailAvailable() });
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           ctx.refresh();
           showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password,
-            A.backend() === 'supabase' ? u.email : null);
+            A.backend() === 'supabase' ? u.email : null,
+            { mail: res.mail, name: u.name, role: u.role });
         },
       });
     });
@@ -1105,8 +1115,13 @@ export function viewUtenti(root, ctx) {
   });
 }
 
-/** Shows a one-time password with copy / e-mail actions. */
-function showPassword(title, message, password, email) {
+/**
+ * Shows a one-time password with copy / e-mail actions.
+ * `opts.mail` is what the backend reported about the delivery (sent / error).
+ */
+function showPassword(title, message, password, email, opts = {}) {
+  const mail = opts.mail || null;
+  const viaFunction = A.credentialsEmailAvailable();
   const actions = [
     { label: 'Chiudi', class: 'btn-secondary', run: U.closeSheet },
     { label: 'Copia', class: 'btn-primary', run: async () => {
@@ -1115,18 +1130,43 @@ function showPassword(title, message, password, email) {
     } },
   ];
   if (email) {
-    actions.splice(1, 0, { label: 'Invia email', class: 'btn-secondary', run: async () => {
-      const res = await A.sendRecoveryEmail(email);
-      U.toast(res.ok ? 'Email inviata a ' + email : res.error, { tone: res.ok ? undefined : 'error' });
-    } });
+    actions.splice(1, 0, {
+      label: mail && mail.sent ? 'Reinvia email' : 'Invia email', class: 'btn-secondary',
+      run: async () => {
+        if (viaFunction) {
+          const res = await A.resendCredentialsEmail({
+            email, name: opts.name || '', role: opts.role || '', password,
+          });
+          const sent = res.ok && res.email_sent;
+          U.toast(sent ? 'Email inviata a ' + email
+            : (res.error || res.mail_error || 'Invio non riuscito'),
+          { tone: sent ? undefined : 'error' });
+          return;
+        }
+        // no Edge Function on the project: send the standard recovery link instead
+        const res = await A.sendRecoveryEmail(email);
+        U.toast(res.ok
+          ? 'Email con il link per impostare la password inviata a ' + email
+          : res.error, { tone: res.ok ? undefined : 'error' });
+      },
+    });
   }
+  const status = !mail ? ''
+    : mail.sent
+      ? `<div class="banner banner-ok" style="margin-top:10px"><span aria-hidden="true">✓</span>
+          <span>Password inviata per email a <b>${U.esc(email)}</b>${mail.provider ? ` (${U.esc(mail.provider)})` : ''}.</span></div>`
+      : `<div class="banner banner-warn" style="margin-top:10px"><span aria-hidden="true">⚠</span>
+          <span>Email non inviata: ${U.esc(mail.error || 'invio non riuscito')}.
+          Copia la password e consegnala a mano.</span></div>`;
   U.openSheet({
     title,
     body: `<p class="caption">${U.esc(message)}</p>
       <p class="mono" style="font-size:18px;font-weight:700;background:var(--brand-50);
         border-radius:8px;padding:10px 12px;margin-top:10px">${U.esc(password)}</p>
-      <p class="hint">Copiala ora: non verrà mostrata di nuovo.${email
-        ? ' In alternativa «Invia email» manda al destinatario il link per impostare la password da sé.' : ''}</p>`,
+      ${status}
+      <p class="hint">Copiala ora: non verrà mostrata di nuovo.${email && !mail ? (viaFunction
+        ? ' «Invia email» manda la password al destinatario.'
+        : ' «Invia email» manda al destinatario il link per impostare la password da sé.') : ''}</p>`,
     actions,
   });
 }
