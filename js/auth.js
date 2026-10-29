@@ -7,6 +7,9 @@
  *     POST /users/invite …) with hashed passwords and signed tokens.
  */
 
+import { backend, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
+export { backend };
+
 export const SESSION_KEY = 'vignero.session.v1';
 const USERS_KEY = 'vignero.users.v1';
 const SESSION_HOURS = 8;
@@ -40,11 +43,11 @@ function write(list) {
   try { localStorage.setItem(USERS_KEY, JSON.stringify(list)); } catch { /* private mode */ }
 }
 
-export function listUsers() {
+function demoListUsers() {
   return read().map((u) => ({ ...u }));
 }
 
-export function resetRegistry() {
+function demoResetRegistry() {
   try { localStorage.removeItem(USERS_KEY); } catch { /* ignore */ }
 }
 
@@ -62,7 +65,7 @@ function newId() {
 }
 
 /** Invite a user: creates the account in state «invitato» with a temporary password. */
-export function inviteUser({ email, name, role, grower }) {
+function demoInviteUser({ email, name, role, grower }) {
   const mail = String(email || '').trim().toLowerCase();
   const full = String(name || '').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return { ok: false, error: 'Email non valida.' };
@@ -84,7 +87,7 @@ export function inviteUser({ email, name, role, grower }) {
   return { ok: true, user, password };
 }
 
-export function setRole(id, role) {
+function demoSetRole(id, role) {
   if (!ROLE_KEYS.includes(role)) return { ok: false, error: 'Ruolo non valido.' };
   const list = read();
   const user = list.find((u) => u.id === id);
@@ -99,7 +102,7 @@ export function setRole(id, role) {
   return { ok: true, user };
 }
 
-export function setGrower(id, grower) {
+function demoSetGrower(id, grower) {
   const list = read();
   const user = list.find((u) => u.id === id);
   if (!user) return { ok: false, error: 'Utente non trovato.' };
@@ -109,7 +112,7 @@ export function setGrower(id, grower) {
 }
 
 /** Block or unblock an account. */
-export function setStatus(id, status) {
+function demoSetStatus(id, status) {
   const list = read();
   const user = list.find((u) => u.id === id);
   if (!user) return { ok: false, error: 'Utente non trovato.' };
@@ -122,11 +125,11 @@ export function setStatus(id, status) {
   return { ok: true, user };
 }
 
-export const blockUser = (id) => setStatus(id, 'sospeso');
-export const unblockUser = (id) => setStatus(id, 'attivo');
+const demoBlock = (id) => demoSetStatus(id, 'sospeso');
+const demoUnblock = (id) => demoSetStatus(id, 'attivo');
 
 /** Reset a password: returns the new temporary one (shown once). */
-export function resetPassword(id) {
+function demoResetPassword(id) {
   const list = read();
   const user = list.find((u) => u.id === id);
   if (!user) return { ok: false, error: 'Utente non trovato.' };
@@ -137,10 +140,10 @@ export function resetPassword(id) {
   return { ok: true, password, user };
 }
 
-export const ROLE_KEYS = ['admin', 'ufficio', 'produttore', 'vendite'];
+
 
 /* ------------------------------------------------------------ sign in */
-export function authenticate(email, password) {
+function demoAuthenticate(email, password) {
   const mail = String(email || '').trim().toLowerCase();
   const pwd = String(password || '');
   if (!mail || !pwd) return { ok: false, error: 'Inserisci email e password.' };
@@ -152,6 +155,7 @@ export function authenticate(email, password) {
     return { ok: false, error: 'Utente sospeso: contatta l\'amministrazione.' };
   }
   if (user.status === 'invitato') user.status = 'attivo';
+  setSession(user);                       // demo: persist the session locally
   return { ok: true, user };
 }
 
@@ -174,7 +178,7 @@ export function setSession(user) {
   return { ...s, user };
 }
 
-export function getSession() {
+function demoGetSession() {
   let raw;
   try { raw = localStorage.getItem(SESSION_KEY); } catch { return null; }
   if (!raw) return null;
@@ -188,11 +192,153 @@ export function getSession() {
            grower: user.grower || null, user };
 }
 
-export function clearSession() {
+function demoClearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
 }
 
 export function minutesLeft(session) {
   if (!session || !session.exp) return 0;
   return Math.max(0, Math.round((session.exp - Date.now()) / 60000));
+}
+
+export const ROLE_KEYS = ['admin', 'ufficio', 'produttore', 'vendite'];
+
+/* ==========================================================================
+ * Backend facade — the UI calls these names; they route to Supabase when
+ * config.js is configured, otherwise to the local demo registry.
+ * ========================================================================== */
+let client = null;
+async function sb() {
+  if (!client) {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    client = mod.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
+  }
+  return client;
+}
+export const supabaseClient = sb;
+
+function italian(msg) {
+  const m = String(msg || '');
+  if (/invalid login credentials/i.test(m)) return 'Email o password non corretti.';
+  if (/email not confirmed/i.test(m)) return 'Email non confermata.';
+  if (/rate limit|too many/i.test(m)) return 'Troppi tentativi: riprova tra qualche istante.';
+  return m;
+}
+
+async function profileOf(c, user) {
+  const { data, error } = await c.from('profiles')
+    .select('user_id,email,nome,role,grower,attivo').eq('user_id', user.id).maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+/** Sign in. Demo: local registry. Supabase: signInWithPassword + profile lookup. */
+export async function authenticate(email, password) {
+  if (backend() === 'demo') return demoAuthenticate(email, password);
+  const c = await sb();
+  const { data, error } = await c.auth.signInWithPassword({ email: String(email || '').trim(), password: String(password || '') });
+  if (error) return { ok: false, error: italian(error.message) };
+  const p = await profileOf(c, data.user);
+  if (!p || !p.role || p.attivo === false) {
+    await c.auth.signOut();
+    return { ok: false, error: 'Account senza un ruolo attivo: chiedi all\'amministrazione.' };
+  }
+  return {
+    ok: true,
+    user: { id: data.user.id, email: data.user.email, name: p.nome || data.user.email,
+            role: p.role, grower: p.grower || null },
+  };
+}
+
+/** The current session (validated against the backend) or null. */
+export async function getSession() {
+  if (backend() === 'demo') return demoGetSession();
+  const c = await sb();
+  const { data } = await c.auth.getSession();
+  const s = data && data.session;
+  if (!s || !s.user) return null;
+  const p = await profileOf(c, s.user);
+  if (!p || !p.role || p.attivo === false) { await c.auth.signOut(); return null; }
+  return {
+    userId: s.user.id, email: s.user.email, name: p.nome || s.user.email,
+    role: p.role, grower: p.grower || null,
+    issuedAt: (s.expires_at || 0) * 1000 - 8 * 3600 * 1000,
+    exp: (s.expires_at || 0) * 1000,
+    user: { id: s.user.id, email: s.user.email, name: p.nome || s.user.email,
+            role: p.role, grower: p.grower || null },
+  };
+}
+
+export async function logout() {
+  if (backend() === 'demo') { demoClearSession(); return; }
+  const c = await sb();
+  await c.auth.signOut();
+}
+
+/* ---- user registry (the Utenti screen) ---- */
+let usersCache = null;
+export async function refreshUsers() {
+  if (backend() === 'demo') { usersCache = demoListUsers(); return usersCache; }
+  const c = await sb();
+  const { data, error } = await c.from('profiles')
+    .select('user_id,email,nome,role,grower,attivo').order('email');
+  usersCache = error ? [] : (data || []).map((p) => ({
+    id: p.user_id, email: p.email, name: p.nome || p.email, role: p.role,
+    grower: p.grower, status: p.attivo === false ? 'sospeso' : (p.role ? 'attivo' : 'invitato'),
+  }));
+  return usersCache;
+}
+export function listUsers() {
+  if (backend() === 'demo') return demoListUsers();
+  return usersCache || [];
+}
+
+/** Role assignment. Demo: instant. Supabase: one UPDATE (allowed by RLS for staff). */
+export async function setRole(id, role) {
+  if (backend() === 'demo') return demoSetRole(id, role);
+  const c = await sb();
+  const { error } = await c.from('profiles').update({ role }).eq('user_id', id);
+  if (error) return { ok: false, error: italian(error.message) };
+  await refreshUsers();
+  return { ok: true };
+}
+export async function setGrower(id, grower) {
+  if (backend() === 'demo') return demoSetGrower(id, grower);
+  const c = await sb();
+  const { error } = await c.from('profiles').update({ grower: grower || null }).eq('user_id', id);
+  if (error) return { ok: false, error: italian(error.message) };
+  return { ok: true };
+}
+
+/* these need the Admin API (server-side key): not available in a static app */
+const needsServer = async () => ({ ok: false,
+  error: 'Operazione disponibile solo dalla dashboard Supabase (richiede la chiave segreta, che non può stare nel browser).' });
+export async function inviteUser(args) {
+  if (backend() === 'demo') return demoInviteUser(args);
+  return needsServer();
+}
+export async function resetPassword(id) {
+  if (backend() === 'demo') return demoResetPassword(id);
+  return needsServer();
+}
+export async function blockUser(id) {
+  if (backend() === 'demo') return demoBlock(id);
+  const c = await sb();
+  const { error } = await c.from('profiles').update({ attivo: false }).eq('user_id', id);
+  if (error) return { ok: false, error: italian(error.message) };
+  await refreshUsers();
+  return { ok: true };
+}
+export async function unblockUser(id) {
+  if (backend() === 'demo') return demoUnblock(id);
+  const c = await sb();
+  const { error } = await c.from('profiles').update({ attivo: true }).eq('user_id', id);
+  if (error) return { ok: false, error: italian(error.message) };
+  await refreshUsers();
+  return { ok: true };
+}
+export async function resetRegistry() {
+  if (backend() === 'demo') { demoResetRegistry(); usersCache = null; return; }
 }

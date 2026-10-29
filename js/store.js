@@ -10,6 +10,9 @@
  *   disponibilita_residua   = giacenza_magazzino - totale_ordinato
  */
 
+import { isSupabase } from './config.js';
+import { supabaseClient } from './auth.js';
+
 export const NON_INDICATA = '(non indicata)';
 export const NON_ATTRIBUITO = 'Non attribuito';
 export const NON_RICONOSCIUTO = 'Non riconosciuto';
@@ -31,6 +34,8 @@ export const store = {
   ordini: [],        // [{id, id_magazzino, tipologia, produzione, varieta, clone, portainnesto, quantita, spedito, note, local}]
   index: { varieta: [], clonesByVariety: new Map(), rootstocks: [], lotById: new Map() },
   ready: false,
+  mode: 'demo',      // 'demo' (local snapshot) | 'supabase' (live database)
+  remote: null,      // aggregated rows for roles that may not read the tables
 };
 
 /* ---------------------------------------------------------------- edits */
@@ -64,10 +69,69 @@ export function resetLocalEdits() {
 }
 
 /* ---------------------------------------------------------------- load */
-export async function init() {
+export async function init(role) {
+  if (isSupabase()) return initSupabase(role);
+  store.mode = 'demo';
   const res = await fetch('data/snapshot.json', { cache: 'no-cache' });
   if (!res.ok) throw new Error('snapshot non disponibile (' + res.status + ')');
   loadFromSnapshot(await res.json());
+}
+
+/** True when entry/editing is wired for the active backend. */
+export const canWrite = () => store.mode !== 'supabase';
+export const isStaffRole = (role) => role === 'admin' || role === 'ufficio';
+
+async function fetchAll(c, table, select, size = 1000) {
+  const out = [];
+  for (let from = 0; ; from += size) {
+    const { data, error } = await c.from(table).select(select).range(from, from + size - 1);
+    if (error) throw new Error(table + ': ' + error.message);
+    out.push(...(data || []));
+    if (!data || data.length < size) break;
+  }
+  return out;
+}
+
+/**
+ * Live backend. Staff can read the tables, so the engine keeps computing the
+ * reports client-side exactly as in demo mode. Produttore/Vendite may not read
+ * them (RLS), so they get the aggregated report views instead.
+ */
+async function initSupabase(role) {
+  const c = await supabaseClient();
+  store.mode = 'supabase';
+  if (isStaffRole(role)) {
+    const [viti, roots, lotti, ordini] = await Promise.all([
+      fetchAll(c, 'anagrafica_vite', 'codice_varieta,codice_clone'),
+      fetchAll(c, 'anagrafica_portainnesto', 'codice_portainnesto'),
+      fetchAll(c, 'lotti_magazzino', '*'),
+      fetchAll(c, 'ordini_impegni', '*'),
+    ]);
+    store.viti = viti.map((r) => ({ varieta: r.codice_varieta, clone: r.codice_clone }));
+    store.portainnesti = roots.map((r) => r.codice_portainnesto);
+    store.lotti = lotti.map((r) => ({
+      id: r.id, anno: r.anno_conferimento, produttore: r.produttore,
+      tipologia: r.tipologia, produzione: r.produzione, varieta: r.codice_varieta,
+      clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+      quantita: r.quantita, note: r.note, local: false,
+    }));
+    store.ordini = ordini.map((r) => ({
+      id: r.id, id_magazzino: r.id_magazzino, tipologia: r.tipologia,
+      produzione: r.produzione, varieta: r.codice_varieta, clone: r.codice_clone,
+      portainnesto: r.codice_portainnesto, quantita: r.quantita,
+      spedito: !!r.spedito, note: r.note, local: false,
+    }));
+    store.remote = null;
+  } else {
+    const rows = await fetchAll(c, 'riepilogo_disponibilita', '*');
+    const negative = role === 'produttore'
+      ? await fetchAll(c, 'vista_disponibilita_negative', '*') : [];
+    const lots = await fetchAll(c, 'vista_lotti_senza_produttore', '*');
+    store.remote = { rows, negative, lots };
+  }
+  rebuild();
+  store.ready = true;
+  return store;
 }
 
 /** Pure loader: same path used by the browser and by the node tests. */
@@ -222,6 +286,9 @@ const zero = () => ({ mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 })
  * per-rootstock subtotals, only one grand total.
  */
 export function reportDisponibilita(filters) {
+  // live backend: roles without table access get the aggregate view; staff (who can
+  // read the tables) fall through to the shared engine below
+  if (store.mode === 'supabase' && store.remote) return reportFromView(filters);
   const m = metrics(filters);
   const C = collator();
   const rows = [...m.values()].sort((a, b) =>
@@ -256,6 +323,11 @@ export function reportDisponibilita(filters) {
  * (a warehouse quantity or a commitment attributed to them).
  */
 export function reportPerProduttore(filters, growerList) {
+  if (store.mode === 'supabase' && store.remote) {
+    return { rows: [], totals: { mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0,
+             per: {}, extra: 0, nonAttr: 0, totaleProduttori: 0 },
+             growers: store.meta.produttori, negativeCount: 0, rowCount: 0 };
+  }
   const f = filters || {};
   const m = metrics(f);
   const C = collator();
@@ -297,8 +369,66 @@ export function reportPerProduttore(filters, growerList) {
   return { rows, totals, growers, negativeCount, rowCount: rows.length };
 }
 
+/* ---- supabase: report 1 from the aggregate view (roles without table access) ---- */
+function reportFromView(filters) {
+  const f = filters || {};
+  const C = collator();
+  const rows = (store.remote ? store.remote.rows : [])
+    .map((r) => ({
+      tipologia: r.tipologia || NON_INDICATA,
+      produzione: r.produzione || NON_INDICATA,
+      varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+      mag: Number(r.giacenza_magazzino || 0),
+      ord: Number(r.totale_ordinato || 0),
+      sped: Number(r.di_cui_spedite || 0),
+      daSpedire: Number(r.quantita_da_spedire || 0),
+      disponibilita: Number(r.disponibilita_residua || 0),
+    }))
+    .filter((r) => !f.tipologia || r.tipologia === f.tipologia)
+    .filter((r) => !f.produzione || r.produzione === f.produzione)
+    .filter((r) => !f.varieta || r.varieta === f.varieta)
+    .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
+    .sort((a, b) => C.compare(a.portainnesto, b.portainnesto) ||
+                    C.compare(a.clone, b.clone) || C.compare(a.varieta, b.varieta));
+
+  const subtotals = new Map();
+  for (const r of rows) {
+    if (!subtotals.has(r.portainnesto)) {
+      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
+        mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
+    }
+    const t = subtotals.get(r.portainnesto);
+    t.count += 1;
+    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
+  }
+  const totals = rows.reduce((t, r) => {
+    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
+    return t;
+  }, zero());
+  return { rows, subtotals, totals, negativeCount: rows.filter((r) => r.disponibilita < 0).length,
+           rowCount: rows.length };
+}
 /** Report 3 — shortages only, sorted varietà → portainnesto → clone. */
 export function reportIndisponibilita(filters) {
+  if (store.mode === 'supabase' && store.remote) {
+    const f = filters || {};
+    const C = collator();
+    const rows = store.remote.negative
+      .map((r) => ({
+        tipologia: r.tipologia || NON_INDICATA, produzione: r.produzione || NON_INDICATA,
+        varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+        mag: Number(r.quantita_magazzino || 0), ord: Number(r.quantita_impegnata || 0),
+        disponibilita: Number(r.disponibilita_effettiva || 0),
+        deficit: Math.abs(Number(r.disponibilita_effettiva || 0)),
+      }))
+      .filter((r) => !f.tipologia || r.tipologia === f.tipologia)
+      .filter((r) => !f.produzione || r.produzione === f.produzione)
+      .filter((r) => !f.varieta || r.varieta === f.varieta)
+      .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
+      .sort((a, b) => C.compare(a.varieta, b.varieta) ||
+                      C.compare(a.portainnesto, b.portainnesto) || C.compare(a.clone, b.clone));
+    return { rows, count: rows.length, deficitTot: rows.reduce((x, r) => x + r.deficit, 0) };
+  }
   const m = metrics(filters);
   const C = collator();
   const rows = [...m.values()]
@@ -313,6 +443,7 @@ export function reportIndisponibilita(filters) {
 
 /** Report 4 — commitments still to be shipped (spedito = false). */
 export function reportDaSpedire(filters) {
+  if (store.mode === 'supabase' && store.remote) return { rows: [], totals: { quantita: 0 }, rowCount: 0 };
   const f = filters || {};
   const C = collator();
   const rows = store.ordini
@@ -339,6 +470,20 @@ export function reportDaSpedire(filters) {
 
 /** KPI summary + recent activity for the home screen. */
 export function summary() {
+  if (store.mode === 'supabase' && store.remote) {
+    const r1 = reportDisponibilita({});
+    const lots = store.remote.lots || [];
+    const ultimi = lots.slice(0, 5).map((l) => ({
+      anno: l.anno_conferimento, produttore: null, varieta: l.codice_varieta,
+      clone: l.codice_clone, portainnesto: l.codice_portainnesto, quantita: l.quantita,
+    }));
+    const neg = reportIndisponibilita({});
+    return {
+      disponibilita: r1.totals.disponibilita, giacenza: r1.totals.mag, ordinato: r1.totals.ord,
+      daSpedire: 0, negativeCount: neg.count, lotti: lots.length, ordiniNonSpediti: 0,
+      ultimiLotti: ultimi, topNegativi: neg.rows.slice(0, 5),
+    };
+  }
   const { totals, negativeCount } = reportDisponibilita({});
   const ultimi = [...store.lotti].slice().reverse().slice(0, 5);
   const top = reportIndisponibilita({}).rows.slice(0, 5);

@@ -5,6 +5,7 @@ Applied to the `Vignero` Supabase project (`aewavfybbvksxscpfxbt`).
 | # | File | What it does |
 |---|---|---|
 | 001 | `001_rls_profiles.sql` | Revokes everything from `anon` (this closed a real exposure: the report views returned production quantities to anyone holding the publishable key), adds `profiles` + `auth_role()` / `is_staff()` helpers + the `on_auth_user_created` trigger, enables RLS on the four data tables with staff-only policies, and re-creates the report views with the role filter embedded (`vendite` excluded from the shortage view). |
+| 003 | `003_report_views_for_rls.sql` | Adds `riepilogo_per_produttore` and `vista_da_spedire` (staff-only): with RLS on, those two reports can no longer be computed in the browser. |
 | 002 | `002_harden_validation_trigger.sql` | Makes `valida_varieta_clone()` `security definer`: without it the trigger's master-data lookup is filtered by the caller's RLS, so non-staff got "il portainnesto non esiste" instead of the real permission error. |
 
 ## Permission model (verified per role)

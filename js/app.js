@@ -47,18 +47,32 @@ export function navigate(href) {
 }
 
 /* --------------------------------------------------------------- session */
-export function login(user) {
-  session = A.setSession(user);
+export async function login(user) {
+  // the backend has already established the session (demo: local storage,
+  // supabase: auth.signInWithPassword); here we only mirror it for the UI
+  session = {
+    userId: user.id || user.userId, email: user.email, name: user.name,
+    role: user.role, grower: user.grower || null,
+    issuedAt: Date.now(), exp: Date.now() + 8 * 3600 * 1000, user,
+  };
   role = session.role;
   paintChrome();
   U.toast(`Ciao ${session.name.split(' ')[0]} · ${P.roleLabel(role)}`);
+  // load the data the new role is allowed to see (the reports depend on the role)
+  try {
+    await S.init(role);
+    await A.refreshUsers();
+  } catch (err) {
+    console.error(err);
+    U.toast('Dati non disponibili: ' + (err.message || err), { tone: 'error' });
+  }
   // After signing in you always start from the home page, whatever URL you came
   // from (an expired session on a sub-page, a shared link, a bookmark).
   navigate('#/home');
 }
 
-export function logout() {
-  A.clearSession();
+export async function logout() {
+  try { await A.logout(); } catch { /* offline */ }
   session = null;
   role = null;
   paintChrome();
@@ -178,25 +192,37 @@ export function render() {
 
 /* ------------------------------------------------------------------ boot */
 async function boot() {
-  session = A.getSession();
+  S.store.mode = A.backend() === 'supabase' ? 'supabase' : 'demo';   // known before login
+  session = await A.getSession();
   role = session ? session.role : null;
   paintChrome();
 
-  try {
-    await S.init();
-  } catch (err) {
-    document.getElementById('main').innerHTML = U.emptyState({
-      icon: '⚠', title: 'Dati non disponibili',
-      text: 'Impossibile caricare data/snapshot.json (' + (err.message || err) + ').',
-      action: 'Riprova',
-    });
-    const btn = document.querySelector('[data-empty-action]');
-    if (btn) btn.addEventListener('click', () => location.reload());
-    return;
+  // Without a session the live backend cannot read anything (RLS denies anon), so
+  // the data layer only runs once we know who is asking. The demo always loads.
+  const needData = !!session || A.backend() === 'demo';
+  if (needData) {
+    try {
+      await S.init(role);
+      if (session) { try { await A.refreshUsers(); } catch { /* not permitted → empty list */ } }
+    } catch (err) {
+      document.getElementById('main').innerHTML = U.emptyState({
+        icon: '⚠', title: 'Dati non disponibili',
+        text: 'Impossibile caricare i dati (' + (err.message || err) + ').',
+        action: 'Riprova',
+      });
+      const btn = document.querySelector('[data-empty-action]');
+      if (btn) btn.addEventListener('click', () => location.reload());
+      return;
+    }
   }
 
   const banner = document.getElementById('demoBanner');
-  try { if (localStorage.getItem(BANNER_KEY) !== '1') banner.hidden = false; } catch { /* ignore */ }
+  const demo = S.store.mode === 'demo';
+  if (!demo) {
+    banner.hidden = true;                 // live data: nothing to disclaim
+  } else {
+    try { if (localStorage.getItem(BANNER_KEY) !== '1') banner.hidden = false; } catch { /* ignore */ }
+  }
   document.getElementById('demoDismiss').addEventListener('click', () => {
     banner.hidden = true;
     try { localStorage.setItem(BANNER_KEY, '1'); } catch { /* ignore */ }

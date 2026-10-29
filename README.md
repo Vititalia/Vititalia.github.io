@@ -101,6 +101,20 @@ phone (four from 640 px), and the recent-lots and shortage panels follow below i
 - **Data entry** requires ≥1024 px; on a phone `#/dati/*` renders an explicit "solo da PC" card
   instead of a half-working form.
 
+## Two backends
+
+`js/config.js` decides where the app reads: with a Supabase URL + **publishable key** it runs
+against the live database and real logins; with nothing configured it falls back to the local demo
+(snapshot + demo accounts). A stored override wins, which is how the test suites stay offline:
+`localStorage.setItem('vignero.backend', 'demo')`.
+
+| | live (`supabase`) | demo (`demo`) |
+|---|---|---|
+| Login | Supabase Auth (e-mail + password), role read from `profiles` | the four demo accounts |
+| Data | the real tables for staff, the report views for produttore/vendite | `data/snapshot.json` (synthetic quantities) |
+| Writes | **not wired yet** — entry screens show a read-only notice | create / edit / delete, stored in the browser |
+| Users screen | lists `profiles`, assigns roles (invite/reset need the dashboard) | full lifecycle |
+
 ## Data
 
 The published demo ships **real structure with synthetic quantities** — variety/clone/rootstock codes

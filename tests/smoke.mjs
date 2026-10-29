@@ -63,6 +63,7 @@ async function loginAs(role) {
 
 /* boot the app */
 window.localStorage.removeItem('vignero.session.v1');
+window.localStorage.setItem('vignero.backend', 'demo');
 window.scrollTo = () => {};
 const app = await import('../js/app.js');
 const auth = await import('../js/auth.js');
@@ -91,6 +92,7 @@ ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before si
   /* one account per profile must land on its own permitted set */
   for (const u of auth.USERS) {
     window.localStorage.removeItem('vignero.session.v1');
+window.localStorage.setItem('vignero.backend', 'demo');
     window.location.hash = '#/login';
     window.dispatchEvent(new window.HashChangeEvent('hashchange'));
     await wait(20);
@@ -459,29 +461,29 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(document.querySelectorAll('[data-block]').length >= 4, 'rows offer block actions');
   ok(document.querySelectorAll('[data-reset-pw]').length >= 4, 'rows offer password reset');
 
-  const invited = auth.inviteUser({ name: 'Test Vendite', email: 'test.vendite@vignero.it', role: 'vendite' });
+  const invited = await auth.inviteUser({ name: 'Test Vendite', email: 'test.vendite@vignero.it', role: 'vendite' });
   ok(invited.ok, 'invite creates the account');
   ok(invited.user.status === 'invitato', 'the invited account starts as «invitato»');
   ok(!!invited.password, 'a temporary password is returned once');
-  ok(auth.authenticate('test.vendite@vignero.it', invited.password).ok,
+  ok((await auth.authenticate('test.vendite@vignero.it', invited.password)).ok,
      'the invited user can sign in with the temporary password');
 
-  const blocked = auth.blockUser(invited.user.id);
+  const blocked = await auth.blockUser(invited.user.id);
   ok(blocked.ok, 'the account can be blocked');
-  const refused = auth.authenticate('test.vendite@vignero.it', invited.password);
+  const refused = await auth.authenticate('test.vendite@vignero.it', invited.password);
   ok(!refused.ok && /sospeso/i.test(refused.error), 'a blocked account cannot sign in');
 
-  ok(auth.unblockUser(invited.user.id).ok, 'the account can be reactivated');
-  ok(auth.authenticate('test.vendite@vignero.it', invited.password).ok, 'and can sign in again');
+  ok((await auth.unblockUser(invited.user.id)).ok, 'the account can be reactivated');
+  ok((await auth.authenticate('test.vendite@vignero.it', invited.password)).ok, 'and can sign in again');
 
-  const reset = auth.resetPassword(invited.user.id);
+  const reset = await auth.resetPassword(invited.user.id);
   ok(reset.ok && reset.password !== invited.password, 'password reset issues a new password');
-  ok(!auth.authenticate('test.vendite@vignero.it', invited.password).ok, 'the old password stops working');
-  ok(auth.authenticate('test.vendite@vignero.it', reset.password).ok, 'the new password works');
+  ok(!(await auth.authenticate('test.vendite@vignero.it', invited.password)).ok, 'the old password stops working');
+  ok((await auth.authenticate('test.vendite@vignero.it', reset.password)).ok, 'the new password works');
 
-  ok(auth.setRole(invited.user.id, 'produttore').ok, 'role can be reassigned');
+  ok((await auth.setRole(invited.user.id, 'produttore')).ok, 'role can be reassigned');
   ok(auth.listUsers().find((u) => u.id === invited.user.id).role === 'produttore', 'the new role is stored');
-  auth.resetRegistry();
+  await auth.resetRegistry();
   ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'registry reset clears the invite');
 }
 

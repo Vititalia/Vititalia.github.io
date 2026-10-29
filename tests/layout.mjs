@@ -27,6 +27,7 @@ async function open(viewport, route) {
         role: 'admin', grower: null, issuedAt: Date.now(), exp: Date.now() + 3600000,
       }));
       localStorage.setItem('vignero.demo.dismissed', '1');
+    localStorage.setItem('vignero.backend', 'demo');
     } catch {}
   });
   const page = await ctx.newPage();

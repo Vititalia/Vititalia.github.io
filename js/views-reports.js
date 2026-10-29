@@ -53,6 +53,7 @@ export function viewLogin(root, ctx) {
             verificate nel browser: nessun dato lascia il dispositivo.</p>
         </form>
 
+        ${A.backend && A.backend() === 'supabase' ? '' : `
         <details class="demo-accounts">
           <summary>Account dimostrativi (uno per profilo)</summary>
           <table>
@@ -69,7 +70,7 @@ export function viewLogin(root, ctx) {
           </table>
           <p class="hint">Autenticazione dimostrativa lato client: dimostra il flusso di accesso,
             non protegge nulla. In produzione l'accesso va verificato dal server.</p>
-        </details>
+        </details>`}
       </div>
     </div>`;
 
@@ -86,8 +87,12 @@ export function viewLogin(root, ctx) {
       el.focus();
     }
   };
-  const attempt = (email, password) => {
-    const res = A.authenticate(email, password);
+  const attempt = async (email, password) => {
+    btn.disabled = true; btn.textContent = 'Accesso…';
+    let res;
+    try { res = await A.authenticate(email, password); }
+    catch (e) { res = { ok: false, error: 'Accesso non disponibile: ' + (e.message || e) }; }
+    btn.disabled = false; btn.textContent = 'Accedi';
     if (!res.ok) { showError(res.error, 'password'); return; }
     ctx.login(res.user);
   };
@@ -99,11 +104,7 @@ export function viewLogin(root, ctx) {
     const email = form.elements.email.value;
     const password = form.elements.password.value;
     if (!email || !password) { showError('Inserisci email e password.'); return; }
-    btn.disabled = true;
-    btn.textContent = 'Accesso…';
     attempt(email, password);
-    btn.disabled = false;
-    btn.textContent = 'Accedi';
   });
 
   root.querySelectorAll('[data-fill]').forEach((b) => {
@@ -743,6 +744,7 @@ export function viewProfilo(root, ctx) {
 export function viewUtenti(root, ctx) {
   const users = A.listUsers();
   const canEdit = P.can(ctx.role, 'config.utenti');
+  const live = A.backend() === 'supabase';
   const statusBadge = (st) => st === 'attivo' ? '<span class="badge badge-ok">attivo</span>'
     : st === 'invitato' ? '<span class="badge badge-warn">invitato</span>'
     : '<span class="badge badge-danger">sospeso</span>';
@@ -754,11 +756,12 @@ export function viewUtenti(root, ctx) {
       <p class="sub">${users.length} account · inviti, ruoli, sospensioni e reset password</p>
     </div>
     <div class="spacer"></div>
-    ${canEdit ? '<button class="btn btn-primary" type="button" id="inviteBtn">+ Invita utente</button>' : ''}</div>
+    ${canEdit && !live ? '<button class="btn btn-primary" type="button" id="inviteBtn">+ Invita utente</button>' : ''}</div>
 
-    <div class="banner banner-info"><span aria-hidden="true">i</span>
-      <span>La gestione utenti è dimostrativa: gli account vivono nel browser. In produzione
-      l'invito parte dal server con password monouso e link a scadenza.</span></div>
+    <div class="banner ${live ? 'banner-warn' : 'banner-info'}"><span aria-hidden="true">i</span>
+      <span>${live
+        ? 'Dati reali: gli inviti e il reset password richiedono la chiave segreta e si fanno dalla dashboard Supabase (Authentication → Users). Qui puoi consultare gli account e assegnare i ruoli.'
+        : 'La gestione utenti è dimostrativa: gli account vivono nel browser. In produzione l\'invito parte dal server con password monouso e link a scadenza.'}</span></div>
 
     <div class="report">${U.buildTable({
       cols: [{ label: 'Nome' }, { label: 'Email' }, { label: 'Ruolo' }, { label: 'Produttore' },
@@ -773,7 +776,7 @@ export function viewUtenti(root, ctx) {
           { html: statusBadge(u.status), label: 'Stato' },
           { html: `<div class="row" style="gap:6px">
               <button class="btn btn-secondary btn-sm" type="button" data-role-for="${U.esc(u.id)}">Ruolo</button>
-              <button class="btn btn-secondary btn-sm" type="button" data-reset-pw="${U.esc(u.id)}">Password</button>
+              ${live ? '' : `<button class="btn btn-secondary btn-sm" type="button" data-reset-pw="${U.esc(u.id)}">Password</button>`}
               ${u.status === 'sospeso'
                 ? `<button class="btn btn-secondary btn-sm" type="button" data-unblock="${U.esc(u.id)}">Riattiva</button>`
                 : `<button class="btn btn-danger btn-sm" type="button" data-block="${U.esc(u.id)}">Sospendi</button>`}
@@ -786,7 +789,8 @@ export function viewUtenti(root, ctx) {
       <button class="btn btn-ghost btn-sm" type="button" id="resetRegistry">Ripristina gli utenti dimostrativi</button>
     </div>`;
 
-  root.querySelector('#inviteBtn').addEventListener('click', () => {
+  const inviteBtn = root.querySelector('#inviteBtn');
+  if (inviteBtn) inviteBtn.addEventListener('click', () => {
     U.openSheet({
       title: 'Invita utente',
       body: `<form id="inviteForm" novalidate>
@@ -850,11 +854,11 @@ export function viewUtenti(root, ctx) {
         ],
         onMount: (sheet) => {
           const form = sheet.querySelector('#roleForm');
-          function save() {
-            const res = A.setRole(u.id, form.elements.role.value);
+          async function save() {
+            const res = await A.setRole(u.id, form.elements.role.value);
             const err = sheet.querySelector('#roleErr');
             if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
-            if (form.elements.role.value === 'produttore') A.setGrower(u.id, form.elements.grower.value);
+            if (form.elements.role.value === 'produttore') await A.setGrower(u.id, form.elements.grower.value);
             U.closeSheet();
             U.toast('Ruolo aggiornato');
             ctx.refresh();
@@ -871,8 +875,8 @@ export function viewUtenti(root, ctx) {
         title: 'Reimpostare la password?',
         message: `Verrà generata una password temporanea per ${u.name}.`,
         confirmLabel: 'Genera password',
-        onConfirm: () => {
-          const res = A.resetPassword(u.id);
+        onConfirm: async () => {
+          const res = await A.resetPassword(u.id);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password);
           ctx.refresh();
@@ -888,8 +892,8 @@ export function viewUtenti(root, ctx) {
         title: 'Sospendere l\'utente?',
         message: `${u.name} non potrà più accedere finché non viene riattivato.`,
         confirmLabel: 'Sospendi', danger: true,
-        onConfirm: () => {
-          const res = A.blockUser(u.id);
+        onConfirm: async () => {
+          const res = await A.blockUser(u.id);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
           U.toast('Utente sospeso');
           ctx.refresh();
@@ -898,8 +902,8 @@ export function viewUtenti(root, ctx) {
     });
   });
   root.querySelectorAll('[data-unblock]').forEach((b) => {
-    b.addEventListener('click', () => {
-      const res = A.unblockUser(b.dataset.unblock);
+    b.addEventListener('click', async () => {
+      const res = await A.unblockUser(b.dataset.unblock);
       if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
       U.toast('Utente riattivato');
       ctx.refresh();

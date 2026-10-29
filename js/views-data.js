@@ -3,6 +3,11 @@ import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
 
+/** In the live backend the entry screens are read-only for now. */
+const WRITE_NOTICE = `<div class="banner banner-warn"><span aria-hidden="true">i</span>
+  <span>Modalità dati reali: la consultazione è attiva, l'inserimento e la modifica
+  saranno abilitati nella prossima release. Nessuna modifica viene salvata da qui.</span></div>`;
+
 const PAGE = 40;
 /* one search term per list: a filter typed on one page must not leak into another */
 const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', vitiSearch: '', vitiVarieta: '', rootsSearch: '', produttore: '' };
@@ -69,10 +74,10 @@ function wireVarietyClone(scope, preset = {}) {
   };
 }
 
-const actions = (id) => `<div class="row" style="gap:6px">
+const actions = (id) => (S.canWrite() ? `<div class="row" style="gap:6px">
     <button class="btn btn-secondary btn-sm" type="button" data-edit="${U.esc(id)}">Modifica</button>
     <button class="btn btn-danger btn-sm" type="button" data-del="${U.esc(id)}">Elimina</button>
-  </div>`;
+  </div>` : '');
 
 /* --------------------------------------------------------- S-13 lotti */
 export function viewLotti(root, ctx) {
@@ -94,9 +99,10 @@ export function viewLotti(root, ctx) {
     <div class="spacer"></div>
     <div class="row">
       <button class="btn btn-secondary btn-sm" type="button" id="importBtn">Importa CSV</button>
-      <button class="btn btn-primary" type="button" id="newBtn">+ Nuovo lotto</button>
+      ${S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Nuovo lotto</button>' : ''}
     </div></div>
 
+    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
         <label class="field" style="margin:0"><span>Cerca</span>
@@ -140,7 +146,8 @@ export function viewLotti(root, ctx) {
   const more = root.querySelector('#more');
   if (more) more.addEventListener('click', () => { state.lottiLimit += PAGE; ctx.refresh(); });
   root.querySelector('#importBtn').addEventListener('click', () => ctx.navigate('#/dati/import'));
-  root.querySelector('#newBtn').addEventListener('click', () => openLottoForm(ctx));
+  const newLot = root.querySelector('#newBtn');
+  if (newLot) newLot.addEventListener('click', () => openLottoForm(ctx));
 
   root.querySelectorAll('[data-edit]').forEach((b) => {
     b.addEventListener('click', () => {
@@ -233,9 +240,10 @@ export function viewOrdini(root, ctx) {
     <div class="spacer"></div>
     <div class="row">
       <button class="btn btn-secondary btn-sm" type="button" id="importBtn">Importa CSV</button>
-      <button class="btn btn-primary" type="button" id="newBtn">+ Nuovo impegno</button>
+      ${S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Nuovo impegno</button>' : ''}
     </div></div>
 
+    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="banner banner-info"><span aria-hidden="true">i</span>
       <span>Ogni impegno è collegato a un lotto (<code>id_magazzino</code>): è così che la quantità entra
       nella colonna del produttore nel riepilogo per produttore.</span></div>
@@ -296,7 +304,8 @@ export function viewOrdini(root, ctx) {
       });
     });
   });
-  root.querySelector('#newBtn').addEventListener('click', () => openOrdineForm(ctx));
+  const newOrd = root.querySelector('#newBtn');
+  if (newOrd) newOrd.addEventListener('click', () => openOrdineForm(ctx));
   root.querySelector('#importBtn').addEventListener('click', () => ctx.navigate('#/dati/import'));
 }
 
@@ -587,8 +596,9 @@ export function viewViti(root, ctx) {
       <p class="sub">${subtitle} · inserimento, modifica ed eliminazione</p>
     </div>
     <div class="spacer"></div>
-    <div class="row">${P.can(ctx.role, 'anag.viti') ? '<button class="btn btn-primary" type="button" id="newBtn">+ Varietà / clone</button>' : ''}</div></div>
+    <div class="row">${P.can(ctx.role, 'anag.viti') && S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Varietà / clone</button>' : ''}</div></div>
 
+    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
         <div class="field" style="margin:0">
@@ -721,8 +731,9 @@ export function viewPortainnesti(root, ctx) {
       <p class="sub">${U.fmtQty(S.store.portainnesti.length)} codici · inserimento, modifica ed eliminazione</p>
     </div>
     <div class="spacer"></div>
-    <div class="row">${P.can(ctx.role, 'anag.portainnesti') ? '<button class="btn btn-primary" type="button" id="newBtn">+ Portainnesto</button>' : ''}</div></div>
+    <div class="row">${P.can(ctx.role, 'anag.portainnesti') && S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Portainnesto</button>' : ''}</div></div>
 
+    ${S.canWrite() ? '' : WRITE_NOTICE}
     <div class="card card-pad mb">
       <label class="field" style="margin:0"><span>Cerca codice</span>
         <input type="search" id="q" value="${U.esc(state.rootsSearch)}" placeholder="es. 1103"></label>
@@ -739,10 +750,10 @@ export function viewPortainnesti(root, ctx) {
             { html: `<span class="ident">${U.esc(c)}</span>`, cls: 'ident' },
             U.metric('Utilizzi', U.fmtQty(used)),
             { html: used ? '<span class="badge badge-ok">in uso</span>' : '<span class="badge">libero</span>', label: 'Stato' },
-            { html: `<div class="row" style="gap:6px">
+            { html: S.canWrite() ? `<div class="row" style="gap:6px">
                 <button class="btn btn-secondary btn-sm" type="button" data-rename="${U.esc(c)}">Modifica</button>
                 <button class="btn btn-danger btn-sm" type="button" data-del-root="${U.esc(c)}">Elimina</button>
-              </div>`, label: 'Azioni', cls: 'no-print' },
+              </div>` : '—', label: 'Azioni', cls: 'no-print' },
           ],
         };
       }) : [{ type: 'empty', cells: [{ html: 'Nessun portainnesto trovato.' }] }],
