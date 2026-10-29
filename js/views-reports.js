@@ -829,11 +829,9 @@ export function viewPermessi(root, ctx) {
 /* --------------------------------------------------------------- profilo */
 export function viewProfilo(root, ctx) {
   const s = ctx.session || {};
-  const counts = {
-    viti: S.store.viti.length, portainnesti: S.store.portainnesti.length,
-    lotti: S.store.lotti.length, ordini: S.store.ordini.length,
-  };
   const seeAccounts = P.can(ctx.role, 'profilo.accounts');
+  // demo only: edits live in localStorage, so they can be thrown away
+  const hasLocalEdits = A.backend() === 'demo' && S.hasLocalEdits();
   const seeDocs = P.can(ctx.role, 'profilo.docs');
   root.innerHTML = `
     <div class="page-head"><div>
@@ -850,6 +848,13 @@ export function viewProfilo(root, ctx) {
           <button class="btn btn-danger btn-sm" type="button" id="logoutBtn">Disconnetti</button>
           ${P.can(ctx.role, 'config.utenti') ? '<a class="btn btn-secondary btn-sm" href="#/config/utenti">Gestione utenti</a>' : ''}
         </div>
+        ${(seeDocs || hasLocalEdits) ? `
+        <div class="row mt">
+          ${hasLocalEdits ? '<button class="btn btn-ghost btn-sm" type="button" id="resetBtn">Azzera le modifiche locali</button>' : ''}
+          ${seeDocs ? `
+            <a class="btn btn-ghost btn-sm" href="docs/01-gui-specification.md">Specifica</a>
+            <a class="btn btn-ghost btn-sm" href="docs/mockups/fede-magazzino-mockup.drawio">Mockup</a>` : ''}
+        </div>` : ''}
       </section>
 
       <section class="card card-pad">
@@ -858,18 +863,6 @@ export function viewProfilo(root, ctx) {
           Minimo 8 caratteri, massimo 72.</p>
         <div class="row mt">
           <button class="btn btn-secondary btn-sm" type="button" id="changePwBtn">Cambia password</button>
-        </div>
-      </section>
-
-      <section class="card card-pad">
-        <h2 class="eyebrow" style="margin-bottom:8px">Dati del dimostrativo</h2>
-        <p class="caption">${U.fmtQty(counts.viti)} coppie varietà/clone · ${U.fmtQty(counts.portainnesti)} portainnesti ·
-          ${U.fmtQty(counts.lotti)} lotti · ${U.fmtQty(counts.ordini)} impegni. Quantità sintetiche, struttura reale.</p>
-        <div class="row mt">
-          <button class="btn btn-secondary btn-sm" type="button" id="resetBtn">Azzera le modifiche locali</button>
-          ${seeDocs ? `
-            <a class="btn btn-ghost btn-sm" href="docs/01-gui-specification.md">Specifica</a>
-            <a class="btn btn-ghost btn-sm" href="docs/mockups/fede-magazzino-mockup.drawio">Mockup</a>` : ''}
         </div>
       </section>
 
@@ -894,7 +887,8 @@ export function viewProfilo(root, ctx) {
     </div>`;
   root.querySelector('#logoutBtn').addEventListener('click', () => ctx.logout());
   root.querySelector('#changePwBtn').addEventListener('click', () => openPasswordSheet(ctx));
-  root.querySelector('#resetBtn').addEventListener('click', () => {
+  const resetBtn = root.querySelector('#resetBtn');
+  if (resetBtn) resetBtn.addEventListener('click', () => {
     U.confirmSheet({
       title: 'Azzerare le modifiche locali?',
       message: 'Lotti, impegni e anagrafiche inseriti in questa sessione vengono rimossi dal browser.',

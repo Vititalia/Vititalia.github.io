@@ -586,6 +586,9 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   prof = text();
   ok(/Specifica/.test(prof) && /Mockup/.test(prof), 'admin: keeps the documentation links');
   ok(prof.includes('Account registrati'), 'admin: sees the registered accounts');
+  ok(!/Dati del dimostrativo/.test(prof) && !/Quantità sintetiche/.test(prof),
+     'profilo: the «Dati del dimostrativo» card is gone');
+  ok(!/coppie varietà\/clone/.test(prof), 'profilo: no synthetic-quantity counters left');
 }
 
 /* ---------------- utenti: invito, ruolo, sospensione, reset ---------------- */
