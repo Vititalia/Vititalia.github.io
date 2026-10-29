@@ -1284,22 +1284,23 @@ App bar "Dati" + a centred card: lock icon, title "Inserimento dati disponibile 
 
 **Purpose** — manage who signs in and with which of the four roles. **Roles** — `admin`.
 
-**Layout** — toolbar (`Cerca utente`, `Nuovo utente`) + grid: Nome · Email · Ruolo (chip) · Produttore collegato (only when ruolo = `produttore`) · Stato (attivo/invitato/disattivato) · Ultimo accesso · actions (`Modifica`, `Reimposta password`, `Disattiva`).
-
-Below the grid, a **read-only permission matrix** rendered from §2.2 (screens × roles, ✓ / —) so an administrator can see what a role means before assigning it — no configuration, just documentation in the product.
+**Layout** — toolbar (`+ Nuovo utente`) + grid: Nome · Email · Ruolo · Produttore collegato (only when ruolo = `produttore`) · Stato (attivo/invitato/sospeso) · Azioni (`Ruolo`, `Password`, `Sospendi` / `Riattiva`). Below the grid, a banner explains that in *Dati reali* mode the account is created in the database and the permissions are enforced there.
 
 **Behaviour**
 
-- Creating a `produttore` user requires selecting which of the 8 growers they represent; the two are linked 1:1 (confirm §15 Q3).
-- `Reimposta password` sends an invitation/reset link; the Admin never sees or sets a password.
-- Deactivating a user revokes sessions immediately.
-- The last remaining `admin` cannot be deactivated or demoted (explained inline).
+- `Nuovo utente` creates the account **in the database** through a staff-only server function and returns a **one-time temporary password**, shown once in a panel with `Copia` and `Invia email`: the administrator either hands the password over or lets the user set their own through the e-mail link (PD-6). The password is never stored by the app, never listed in the grid, and cannot be shown again.
+- `Password` regenerates a one-time temporary password for an existing account with the same panel; the previous password stops working immediately.
+- Creating a `produttore` requires selecting the producer they represent; the two are linked 1:1.
+- `Sospendi` sets the account inactive: it cannot sign in and the sign-in is refused at the profile check; `Riattiva` reverts it.
+- The last remaining `admin` cannot be suspended or demoted (explained inline).
 
 **AC**
 
-- AC-1 Role changes take effect on the affected user's next request (no stale menu).
+- AC-1 Role changes take effect on the affected user's next sign-in (no stale menu) — verified against the live database.
 - AC-2 Permission language on this screen matches the actual route guards (§12) — verified by test.
-- AC-3 Emails are validated and unique; duplicates show an inline error.
+- AC-3 Emails are validated and unique; a duplicate is refused by the database with an inline Italian error.
+- AC-4 A user who is not an administrator calling the creation/reset functions directly is refused (`Non autorizzato`) — verified by test.
+- AC-5 In *Modalità dimostrativa* the same flows run against the local registry, with no network call.
 
 ---
 
@@ -1505,6 +1506,7 @@ Status after reconciling `docs/db-schema.sql`.
 
 | # | Decision | Rationale | Effect |
 |---|---|---|---|
+| **PD-6** | **Creating a user is part of the GUI, with a one-time password (plus an optional e-mail link)** instead of a mail-only invitation. The screen also gains *Sospendi/Riattiva* and a password reset that returns a fresh one-time password | The owner operates the site alone and has no Supabase console workflow: a plain "send an invitation e-mail" needed a hosted mailer and produced 2-per-hour limits during testing. A password generated in the database and shown once gets a new colleague working in seconds, and the e-mail option stays available when SMTP is configured | Supersedes the "the Admin never sees or sets a password" rule of S-19; the mockup page 07 still shows the pre-PD-6 grid |
 | **PD-3** | Report 1 keeps the flat list but **regains a subtotal row per rootstock** ("Totale per portainnesto", bold, tinted) and **drops the «Da spedire» column**; Tipologia and Produzione become **mandatory** filters with defaults | The office asked for the per-rootstock total back while keeping the filterable list; «Da spedire» duplicated a derived value and now has its own report; the two dimensions are not shown in the table, so they cannot be left ambiguous | Supersedes part of PD-1 |
 | **PD-5** | **Anagrafica vite is no longer grouped by variety**: it is a flat list with a searchable **Varietà** filter (plus a clone search) | With 4 786 pairs the group headers made the screen long and hard to scan; a filter answers "show me this variety's clones" in one step, and the variety stays visible as a column | Supersedes the grouped layout of S-16 |
 | **PD-4** | Report 2 **drops «Non attribuito» e «Totale produttori»**; every commitment is placed against a lot (the order form requires it) | Business rule: a record in stock always has a producer — a member or *Esterno* — so an unattributed bucket is a data error, not a column. The report warns if such data ever appears | Supersedes the PD-2 column set |

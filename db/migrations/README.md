@@ -7,6 +7,7 @@ Applied to the `Vignero` Supabase project (`aewavfybbvksxscpfxbt`).
 | 001 | `001_rls_profiles.sql` | Revokes everything from `anon` (this closed a real exposure: the report views returned production quantities to anyone holding the publishable key), adds `profiles` + `auth_role()` / `is_staff()` helpers + the `on_auth_user_created` trigger, enables RLS on the four data tables with staff-only policies, and re-creates the report views with the role filter embedded (`vendite` excluded from the shortage view). |
 | 003 | `003_report_views_for_rls.sql` | Adds `riepilogo_per_produttore` and `vista_da_spedire` (staff-only): with RLS on, those two reports can no longer be computed in the browser. |
 | 002 | `002_harden_validation_trigger.sql` | Makes `valida_varieta_clone()` `security definer`: without it the trigger's master-data lookup is filtered by the caller's RLS, so non-staff got "il portainnesto non esiste" instead of the real permission error. |
+| 004 | `004_user_admin_rpc.sql` | Adds the three staff-only `SECURITY DEFINER` functions the *Utenti* screen needs — `create_user(p_email, p_nome, p_role, p_grower)` (returns a one-time temporary password), `reset_user_password(p_email)` and `delete_user(p_email)` — with the caller's role checked inside; `anon` and non-admins are refused (`Non autorizzato`). Accounts are created in `auth.users` with the token columns initialised to `''` (a NULL token column makes GoTrue answer `500 unexpected_failure`), and the `on_auth_user_created` trigger fills `profiles`. |
 
 ## Permission model (verified per role)
 
@@ -19,10 +20,11 @@ Applied to the `Vignero` Supabase project (`aewavfybbvksxscpfxbt`).
 | `profiles` | all rows, assign roles | all rows, assign roles | own row | own row |
 
 A signed-up user with no `profiles` row (`role IS NULL`) sees **nothing** — checked.
+The three user-admin functions in 004 are **admin-and-ufficio** callable for creation/reset
+(checked by role inside the function) and admin-only for deletion.
 
 ## Still to do (needs dashboard/PAT or the secret key)
 
-1. Create the four users (Auth → Users, *Auto Confirm*), then set their role:
-   `update public.profiles set role = 'admin' where email = '…';`
-2. Auth → Sign In / Providers → Email: **turn sign-ups off** after the four exist.
-3. Auth → URL Configuration: Site URL `https://gabriele-scivoletto-1992.github.io/Vignero/` + same in redirect URLs.
+1. Auth → Sign In / Providers → Email: **turn sign-ups off** — accounts are now created by an administrator from the *Utenti* screen (004).
+2. Auth → URL Configuration: Site URL `https://gabriele-scivoletto-1992.github.io/Vignero/` + same in redirect URLs.
+3. Configure a custom SMTP provider if the «Invia email» action is to be used: the built-in mailer allows only a couple of messages per hour.

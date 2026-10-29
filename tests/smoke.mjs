@@ -155,7 +155,7 @@ const CASES = [
   ['admin', '#/config/permessi', ['Ruoli e permessi', 'Amministratore']],
   ['admin', '#/profilo', ['Profilo', 'Disconnetti', 'Account registrati']],
   ['admin', '#/r/daspedire', ['Da spedire', 'Lotto collegato']],
-  ['admin', '#/config/utenti', ['Utenti', 'Invita utente']],
+  ['admin', '#/config/utenti', ['Utenti', 'Nuovo utente']],
   ['ufficio', '#/config/utenti', ['Utenti']],
   ['produttore', '#/config/utenti', ['Non hai i permessi']],
   ['vendite', '#/r/daspedire', ['Non hai i permessi']],
@@ -461,7 +461,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(document.querySelectorAll('[data-block]').length >= 4, 'rows offer block actions');
   ok(document.querySelectorAll('[data-reset-pw]').length >= 4, 'rows offer password reset');
 
-  const invited = await auth.inviteUser({ name: 'Test Vendite', email: 'test.vendite@vignero.it', role: 'vendite' });
+  const invited = await auth.createUser({ name: 'Test Vendite', email: 'test.vendite@vignero.it', role: 'vendite', grower: null });
   ok(invited.ok, 'invite creates the account');
   ok(invited.user.status === 'invitato', 'the invited account starts as «invitato»');
   ok(!!invited.password, 'a temporary password is returned once');
@@ -476,13 +476,15 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok((await auth.unblockUser(invited.user.id)).ok, 'the account can be reactivated');
   ok((await auth.authenticate('test.vendite@vignero.it', invited.password)).ok, 'and can sign in again');
 
-  const reset = await auth.resetPassword(invited.user.id);
+  const reset = await auth.resetPassword(invited.user);
   ok(reset.ok && reset.password !== invited.password, 'password reset issues a new password');
   ok(!(await auth.authenticate('test.vendite@vignero.it', invited.password)).ok, 'the old password stops working');
   ok((await auth.authenticate('test.vendite@vignero.it', reset.password)).ok, 'the new password works');
 
   ok((await auth.setRole(invited.user.id, 'produttore')).ok, 'role can be reassigned');
   ok(auth.listUsers().find((u) => u.id === invited.user.id).role === 'produttore', 'the new role is stored');
+  ok((await auth.deleteUser(invited.user)).ok, 'the account can be deleted');
+  ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'and disappears from the list');
   await auth.resetRegistry();
   ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'registry reset clears the invite');
 }

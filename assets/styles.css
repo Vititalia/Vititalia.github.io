@@ -113,6 +113,8 @@ main:focus{outline:none}
 .btn-primary:hover{background:var(--brand-700)}
 .btn-secondary{border-color:var(--brand-600);color:var(--brand-600);background:var(--surface)}
 .btn-ghost{background:transparent;color:var(--ink-500)}
+.btn-del{color:var(--danger);font-weight:600}
+.btn-del:hover{background:var(--danger-50)}
 .btn-danger{background:var(--danger-600);color:#fff}
 .btn[disabled]{opacity:.55;cursor:not-allowed}
 .btn-sm{min-height:36px;font-size:13px;padding:0 10px}

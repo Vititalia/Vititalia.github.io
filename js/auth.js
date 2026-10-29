@@ -312,16 +312,56 @@ export async function setGrower(id, grower) {
   return { ok: true };
 }
 
-/* these need the Admin API (server-side key): not available in a static app */
-const needsServer = async () => ({ ok: false,
-  error: 'Operazione disponibile solo dalla dashboard Supabase (richiede la chiave segreta, che non può stare nel browser).' });
-export async function inviteUser(args) {
-  if (backend() === 'demo') return demoInviteUser(args);
-  return needsServer();
+/**
+ * Create a user. Live: the `create_user` RPC (SECURITY DEFINER, staff-only) returns
+ * a one-time temporary password. Demo: the local registry.
+ */
+export async function createUser({ email, name, role, grower }) {
+  if (backend() === 'demo') {
+    const res = demoInviteUser({ email, name, role, grower });
+    return res.ok ? { ok: true, user: res.user, password: res.password } : res;
+  }
+  const c = await sb();
+  const { data, error } = await c.rpc('create_user', {
+    p_email: email, p_nome: name, p_role: role, p_grower: grower || null,
+  });
+  if (error) return { ok: false, error: italian(error.message) };
+  const row = Array.isArray(data) ? data[0] : data;
+  await refreshUsers();
+  return { ok: true, user: { email: row.email, role }, password: row.temp_password };
 }
-export async function resetPassword(id) {
-  if (backend() === 'demo') return demoResetPassword(id);
-  return needsServer();
+
+/** Reset a password: `user` is the row from listUsers(). */
+export async function resetPassword(user) {
+  if (backend() === 'demo') return demoResetPassword(user.id);
+  const c = await sb();
+  const { data, error } = await c.rpc('reset_user_password', { p_email: user.email });
+  if (error) return { ok: false, error: italian(error.message) };
+  const row = Array.isArray(data) ? data[0] : data;
+  return { ok: true, password: row.temp_password, user };
+}
+
+/** Remove an account (administrators only, enforced by the RPC). */
+export async function deleteUser(user) {
+  if (backend() === 'demo') {
+    const list = read().filter((u) => u.id !== user.id);
+    write(list);
+    usersCache = null;
+    return { ok: true };
+  }
+  const c = await sb();
+  const { error } = await c.rpc('delete_user', { p_email: user.email });
+  if (error) return { ok: false, error: italian(error.message) };
+  await refreshUsers();
+  return { ok: true };
+}
+
+/** Send the "set your password" e-mail through the public endpoint (no secret key). */
+export async function sendRecoveryEmail(email) {
+  if (backend() === 'demo') return { ok: false, error: 'Non disponibile in modalità dimostrativa.' };
+  const c = await sb();
+  const { error } = await c.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0] });
+  return error ? { ok: false, error: italian(error.message) } : { ok: true };
 }
 export async function blockUser(id) {
   if (backend() === 'demo') return demoBlock(id);

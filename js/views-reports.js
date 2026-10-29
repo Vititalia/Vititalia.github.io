@@ -756,11 +756,11 @@ export function viewUtenti(root, ctx) {
       <p class="sub">${users.length} account · inviti, ruoli, sospensioni e reset password</p>
     </div>
     <div class="spacer"></div>
-    ${canEdit && !live ? '<button class="btn btn-primary" type="button" id="inviteBtn">+ Invita utente</button>' : ''}</div>
+    ${canEdit ? '<button class="btn btn-primary" type="button" id="inviteBtn">+ Nuovo utente</button>' : ''}</div>
 
     <div class="banner ${live ? 'banner-warn' : 'banner-info'}"><span aria-hidden="true">i</span>
       <span>${live
-        ? 'Dati reali: gli inviti e il reset password richiedono la chiave segreta e si fanno dalla dashboard Supabase (Authentication → Users). Qui puoi consultare gli account e assegnare i ruoli.'
+        ? 'Dati reali: l\'account viene creato nel database con una password temporanea da consegnare all\'interessato (oppure invia l\'email di impostazione password). I permessi sono applicati dal database.'
         : 'La gestione utenti è dimostrativa: gli account vivono nel browser. In produzione l\'invito parte dal server con password monouso e link a scadenza.'}</span></div>
 
     <div class="report">${U.buildTable({
@@ -776,10 +776,12 @@ export function viewUtenti(root, ctx) {
           { html: statusBadge(u.status), label: 'Stato' },
           { html: `<div class="row" style="gap:6px">
               <button class="btn btn-secondary btn-sm" type="button" data-role-for="${U.esc(u.id)}">Ruolo</button>
-              ${live ? '' : `<button class="btn btn-secondary btn-sm" type="button" data-reset-pw="${U.esc(u.id)}">Password</button>`}
+              <button class="btn btn-secondary btn-sm" type="button" data-reset-pw="${U.esc(u.id)}">Password</button>
               ${u.status === 'sospeso'
                 ? `<button class="btn btn-secondary btn-sm" type="button" data-unblock="${U.esc(u.id)}">Riattiva</button>`
                 : `<button class="btn btn-danger btn-sm" type="button" data-block="${U.esc(u.id)}">Sospendi</button>`}
+              ${u.id !== (ctx.session && ctx.session.userId)
+                ? `<button class="btn btn-ghost btn-sm btn-del" type="button" data-del-user="${U.esc(u.id)}">Elimina</button>` : ''}
             </div>`, label: 'Azioni' },
         ],
       })),
@@ -789,6 +791,7 @@ export function viewUtenti(root, ctx) {
       <button class="btn btn-ghost btn-sm" type="button" id="resetRegistry">Ripristina gli utenti dimostrativi</button>
     </div>`;
 
+  let submitFn = null;
   const inviteBtn = root.querySelector('#inviteBtn');
   if (inviteBtn) inviteBtn.addEventListener('click', () => {
     U.openSheet({
@@ -807,7 +810,7 @@ export function viewUtenti(root, ctx) {
         </form>`,
       actions: [
         { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
-        { label: 'Invita', class: 'btn-primary', run: () => submit() },
+        { label: 'Crea utente', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
       ],
       onMount: (sheet) => {
         const form = sheet.querySelector('#inviteForm');
@@ -815,20 +818,30 @@ export function viewUtenti(root, ctx) {
         const syncGrower = () => { growerField.hidden = form.elements.role.value !== 'produttore'; };
         form.elements.role.addEventListener('change', syncGrower);
         syncGrower();
-        function submit() {
-          const res = A.inviteUser({
+        async function submit() {
+          const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+          btn.disabled = true; btn.textContent = 'Creazione…';
+          const payload = {
             name: form.elements.name.value,
             email: form.elements.email.value,
             role: form.elements.role.value,
             grower: form.elements.grower.value,
-          });
+          };
+          let res;
+          try { res = await A.createUser(payload); }
+          catch (e) { res = { ok: false, error: 'Errore: ' + (e.message || e) }; }
+          btn.disabled = false; btn.textContent = 'Crea utente';
           const err = sheet.querySelector('#inviteErr');
           if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
           U.closeSheet();
-          showPassword(`Invito creato per ${res.user.name}`,
-            'Password temporanea: comunicala all\'utente, non sarà più visibile.', res.password);
+          // refresh FIRST: render() closes any open sheet, so the password
+          // panel must be opened afterwards or it would be wiped at once.
           ctx.refresh();
+          showPassword(`Utente creato: ${payload.name || res.user.email}`,
+            'Password temporanea: comunicala all\'interessato, non sarà più visibile.', res.password,
+            A.backend() === 'supabase' ? payload.email : null);
         }
+        submitFn = submit;
       },
     });
   });
@@ -876,9 +889,27 @@ export function viewUtenti(root, ctx) {
         message: `Verrà generata una password temporanea per ${u.name}.`,
         confirmLabel: 'Genera password',
         onConfirm: async () => {
-          const res = await A.resetPassword(u.id);
+          const res = await A.resetPassword(u);
           if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
-          showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password);
+          ctx.refresh();
+          showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password,
+            A.backend() === 'supabase' ? u.email : null);
+        },
+      });
+    });
+  });
+
+  root.querySelectorAll('[data-del-user]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const u = A.listUsers().find((x) => x.id === b.dataset.delUser);
+      U.confirmSheet({
+        title: 'Eliminare l\'utente?',
+        message: `${u.name} (${u.email}) viene rimosso: non potrà più accedere e il suo indirizzo torna libero. L\'operazione non si può annullare.`,
+        confirmLabel: 'Elimina', danger: true,
+        onConfirm: async () => {
+          const res = await A.deleteUser(u);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+          U.toast('Utente eliminato');
           ctx.refresh();
         },
       });
@@ -920,21 +951,29 @@ export function viewUtenti(root, ctx) {
   });
 }
 
-/** Shows a one-time password with a copy button. */
-function showPassword(title, message, password) {
+/** Shows a one-time password with copy / e-mail actions. */
+function showPassword(title, message, password, email) {
+  const actions = [
+    { label: 'Chiudi', class: 'btn-secondary', run: U.closeSheet },
+    { label: 'Copia', class: 'btn-primary', run: async () => {
+      try { await navigator.clipboard.writeText(password); U.toast('Password copiata'); }
+      catch { U.toast('Copia non disponibile', { tone: 'error' }); }
+    } },
+  ];
+  if (email) {
+    actions.splice(1, 0, { label: 'Invia email', class: 'btn-secondary', run: async () => {
+      const res = await A.sendRecoveryEmail(email);
+      U.toast(res.ok ? 'Email inviata a ' + email : res.error, { tone: res.ok ? undefined : 'error' });
+    } });
+  }
   U.openSheet({
     title,
     body: `<p class="caption">${U.esc(message)}</p>
       <p class="mono" style="font-size:18px;font-weight:700;background:var(--brand-50);
         border-radius:8px;padding:10px 12px;margin-top:10px">${U.esc(password)}</p>
-      <p class="hint">Copiala ora: non verrà mostrata di nuovo.</p>`,
-    actions: [
-      { label: 'Chiudi', class: 'btn-secondary', run: U.closeSheet },
-      { label: 'Copia', class: 'btn-primary', run: async () => {
-        try { await navigator.clipboard.writeText(password); U.toast('Password copiata'); }
-        catch { U.toast('Copia non disponibile', { tone: 'error' }); }
-      } },
-    ],
+      <p class="hint">Copiala ora: non verrà mostrata di nuovo.${email
+        ? ' In alternativa «Invia email» manda al destinatario il link per impostare la password da sé.' : ''}</p>`,
+    actions,
   });
 }
 
