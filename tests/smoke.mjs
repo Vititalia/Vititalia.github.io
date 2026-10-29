@@ -191,7 +191,7 @@ desktop = true;
             'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Utenti', 'Ruoli e permessi', 'Profilo'],
     ufficio: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Da spedire', 'Lotti magazzino',
               'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Utenti', 'Profilo'],
-    produttore: ['Disponibilità', 'Indisponibilità', 'Profilo'],
+    produttore: ['Disponibilità', 'Indisponibilità', 'Messo a disposizione', 'Profilo'],
     vendite: ['Disponibilità', 'Profilo'],
   };
   for (const [role, titles] of Object.entries(expected)) {
@@ -262,6 +262,141 @@ desktop = true;
   ok(document.querySelectorAll('.chip').length === 1, 'the rootstock is a removable chip');
   ok(![...document.querySelectorAll('.chip')].some((c) => /Tipologia|Produzione/.test(c.textContent)),
      'mandatory filters are not removable chips');
+}
+
+/* ---------------- subtotal row comes BEFORE its group (PD-7) ---------------- */
+{
+  const order = (rows) => rows.map((tr) => tr.classList.contains('subtotal') ? 'S' : 'R').join('');
+  const groups = (rows) => {
+    let prev = null, bad = 0;
+    for (const tr of rows) {
+      if (tr.classList.contains('subtotal')) {
+        const code = tr.querySelector('td[data-label="Portainnesto"]')?.textContent.trim();
+        prev = code || null;
+      } else if (!tr.classList.contains('total')) {
+        const code = tr.querySelector('td[data-label="Portainnesto"]')?.textContent.trim();
+        if (code !== prev) bad++;
+      }
+    }
+    return bad;
+  };
+
+  for (const [hash, label] of [['#/r/disponibilita', 'disponibilità'],
+                               ['#/r/indisponibilita', 'indisponibilità'],
+                               ['#/r/produttore', 'per produttore']]) {
+    await loginAs('admin');
+    await go(hash);
+    const rows = [...document.querySelectorAll('.grid tbody tr')]
+      .filter((tr) => !tr.classList.contains('total') && !tr.classList.contains('empty-row'));
+    ok(rows.length > 1, `${label}: rows rendered (${rows.length})`);
+    ok(rows[0] && rows[0].classList.contains('subtotal'),
+       `${label}: the table starts with a «Totale per portainnesto» row`);
+    const seq = order(rows);
+    ok(seq.length > 0 && seq[0] === 'S', `${label}: subtotal first (${seq.slice(0, 8)}…)`);
+    ok(!/SS/.test(seq), `${label}: no two subtotals in a row — every group has its cloni`);
+    ok(groups(rows) === 0, `${label}: every clone row follows its own subtotal`);
+    const lastRow = [...document.querySelectorAll('.grid tbody tr')].pop();
+    // report 3 has no grand total (the deficit banner carries it), the others do
+    ok(hash === '#/r/indisponibilita'
+      ? lastRow.classList.contains('trow')
+      : lastRow.classList.contains('total'),
+      `${label}: the table ends with ${hash === '#/r/indisponibilita' ? 'a clone row' : 'the grand total'}`);
+  }
+  /* the deficit subtotal is the sum of its group, shown as a negative number */
+  await go('#/r/indisponibilita');
+  const sub = document.querySelector('.grid tbody tr.subtotal');
+  const deficitCell = sub.querySelector('td.metric:last-child').textContent.trim();
+  ok(/^\u2212\d/.test(deficitCell) || deficitCell === '0', `indisponibilità: subtotal deficit is negative (${deficitCell})`);
+}
+
+/* ---------------- report 5: messo a disposizione (producer only) ---------------- */
+{
+  for (const role of ['admin', 'ufficio', 'vendite']) {
+    await loginAs(role);
+    const t = await go('#/r/messodisposizione');
+    ok(t.includes('Non hai i permessi'), `${role}: messo a disposizione is refused`);
+  }
+
+  await loginAs('produttore');
+  await go('#/r/messodisposizione');
+  const cols = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
+  ok(cols.length === 6, `messo: six columns like the availability report (${cols.length})`);
+  ok(cols.join('·') === 'Codice clone·Codice portainnesto·Magazzino·Ordinato·Di cui spedito·Disponibilità',
+     `messo: same columns as report 1 (${cols.join('·')})`);
+  ok(text().includes('Mori Marco'), 'messo: the screen names the linked producer');
+  const growerSel = document.querySelector('#filterHost [data-filter="produttore"]');
+  ok(!growerSel || growerSel.closest('label').hidden,
+     'messo: the grower filter stays hidden — the producer is the session');
+  ok(document.querySelector('#filterHost [data-filter="tipologia"]').value === 'Barbatelle innestate',
+     'messo: the mandatory filters keep their defaults');
+  const rows = [...document.querySelectorAll('.grid tbody tr')];
+  ok(rows[0] && rows[0].classList.contains('subtotal'), 'messo: subtotal first');
+  ok(document.querySelectorAll('.grid tbody tr.subtotal').length > 0, 'messo: per-rootstock subtotals');
+  ok(document.querySelectorAll('.grid tbody tr.total').length === 1, 'messo: one grand total');
+  const totalText = rows[rows.length - 1].textContent;
+  ok(/Totale generale/.test(totalText), 'messo: grand total row present');
+  /* the totals row drives the numbers: magazzino - ordinato = disponibilità */
+  const cells = [...document.querySelectorAll('.grid tbody tr.total td.metric')]
+    .map((td) => Number(td.textContent.replace(/[^\d−-]/g, '').replace('\u2212', '-')));
+  ok(cells.length === 4, `messo: four numeric totals (${cells.length})`);
+  ok(cells[3] === cells[0] - cells[1], `messo: disponibilità = magazzino - ordinato (${cells.join(',')})`);
+}
+
+/* ---------------- ordini: the note in read mode + CSV exports ---------------- */
+{
+  const S3 = await import('../js/store.js');
+  const tap = (node) => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const captured = [];
+  window.URL.createObjectURL = (blob) => { captured.push(blob); return 'blob:stub'; };
+  window.URL.revokeObjectURL = () => {};
+
+  await loginAs('admin');
+  const lot = S3.store.lotti.find((l) => l.produttore && l.quantita > 10);
+  S3.addOrdine({
+    id_magazzino: lot.id, tipologia: lot.tipologia, produzione: lot.produzione,
+    varieta: lot.varieta, clone: lot.clone, portainnesto: lot.portainnesto,
+    quantita: 5, spedito: false, note: 'Consegna in due trance',
+  });
+  await go('#/dati/ordini');
+  const cols = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
+  ok(cols.includes('Note'), `ordini: the read table has a Note column (${cols.join(' · ')})`);
+  ok(text().includes('Consegna in due trance'), 'ordini: the note is readable in the list');
+  tap(document.getElementById('exportBtn'));
+  await wait(30);
+  const ordCsv = captured.length ? await captured[captured.length - 1].text() : '';
+  ok(/^\ufeff?id;tipologia;produzione;varieta;clone;portainnesto;quantita;spedito;note;id_magazzino/.test(ordCsv)
+     || ordCsv.includes(';note;'), `ordini export: header line carries the note column (${ordCsv.split('\r')[0]})`);
+  ok(ordCsv.includes('Consegna in due trance'), 'ordini export: the note value is in the file');
+  ok(ordCsv.split('\r\n').length - 1 === S3.store.ordini.length,
+     `ordini export: one line per order (${ordCsv.split('\r\n').length - 1})`);
+
+  await go('#/dati/lotti');
+  ok(!!document.getElementById('exportBtn'), 'lotti: the Esporta CSV button is there');
+  tap(document.getElementById('exportBtn'));
+  await wait(30);
+  const lotCsv = captured.length ? await captured[captured.length - 1].text() : '';
+  ok(lotCsv.includes('anno') && lotCsv.includes('quantita') && lotCsv.includes('produttore'),
+     `lotti export: importable headers (${lotCsv.split('\r')[0]})`);
+  ok(lotCsv.split('\r\n').length - 1 === S3.store.lotti.length,
+     `lotti export: one line per lot (${lotCsv.split('\r\n').length - 1})`);
+}
+
+/* ---------------- producer home: no «da spedire» ---------------- */
+{
+  await loginAs('produttore');
+  await go('#/home');
+  const kpis = [...document.querySelectorAll('.kpi')].map((k) => k.textContent);
+  ok(!kpis.some((k) => /Da spedire/.test(k)), 'produttore home: the «Da spedire» KPI is gone');
+  ok(!document.querySelectorAll('.apptile[href="#/r/daspedire"]').length,
+     'produttore home: no «Da spedire» tile');
+  ok(!text().includes('Da spedire'), 'produttore home: the phrase does not appear at all');
+  ok(document.querySelectorAll('.apptile[href="#/r/messodisposizione"]').length === 1,
+     'produttore home: the «Messo a disposizione» tile is there');
+  ok(!/impegni non spediti/.test(text()), 'produttore home: no shipment count in the subtitle');
+  await loginAs('admin');
+  await go('#/home');
+  ok([...document.querySelectorAll('.kpi')].some((k) => /Da spedire/.test(k.textContent)),
+     'admin home: the «Da spedire» KPI still shows');
 }
 
 /* ---------------- per produttore: 14 columns, grower + rootstock filters ---------------- */

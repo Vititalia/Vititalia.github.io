@@ -129,6 +129,7 @@ Legend: **E** = enter/edit · **R** = read · **R\*** = read, aggregated totals 
 | S-04/S-05 Riepilogo disponibilità | R | R | R | R |
 | S-06/S-07 Riepilogo per produttore | R | R | — | — |
 | S-08/S-09 Indisponibilità | R | R | R | — |
+| S-23 Messo a disposizione | — | — | R | — |
 | S-13 Lotti magazzino | E | E | — | — |
 | S-14 Ordini e impegni | E | E | — | — |
 | S-15 Import Excel | E | E | — | — |
@@ -284,12 +285,12 @@ Null-dimension handling
 |---|---|
 | Source | `lotti_magazzino` ⟕ `ordini_impegni` on the grouping key |
 | Filters | **`tipologia` and `produzione` are mandatory** and open on `Barbatelle innestate` / `Nuova produzione` (the table never shows those dimensions, so a value must always be chosen); `codice_varieta` (searchable) and **`codice_portainnesto` (searchable)** are optional |
-| Layout | **Flat list**: one row per combination. The rootstock is a filter and a column, **not** a grouping level — there are no group headers and no per-rootstock subtotals (decision PD-1, §15.3) |
+| Layout | **Flat list**: one row per combination. The rootstock is a filter and a column, **not** a grouping level — no group headers, and the **subtotal row opens each rootstock group** instead of closing it (PD-7) |
 | Columns | Codice clone (+ variety) · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità — **no «Da spedire» column** (PD-3) |
 | Sort | `codice_portainnesto` ASC, then `codice_clone` ASC |
-| Totals | a **subtotal row per rootstock**, labelled **"Totale per portainnesto"** with its rootstock code and the aggregated values, highlighted and bold; then one **"Totale generale"** row (PD-3) |
+| Totals | a **subtotal row per rootstock**, labelled **"Totale per portainnesto"** with its rootstock code and the aggregated values, highlighted and bold, placed **first in its group** — the per-clone lines it summarises follow it (PD-3, PD-7); then one **"Totale generale"** row |
 | Alert | Disponibilità < 0 → whole row bold red + `!` icon + red left border |
-| Export | CSV/Excel/PDF of the filtered rows plus the grand total |
+| Export | CSV of the filtered rows, per-rootstock subtotals included in the same order as the table (subtotal first), plus the grand total |
 
 **Report 2 — Riepilogo disponibilità per produttore** (Admin, Amministrazione)
 
@@ -298,18 +299,18 @@ Null-dimension handling
 | Split basis | Warehouse quantities split by `lotti_magazzino.produttore` (canonical 8 + **"Non attribuito"** + **"Non riconosciuto"**) |
 | Ordered quantities | An order is attributed to a grower **through `id_magazzino → lotti.produttore`**. Orders with `id_magazzino IS NULL` cannot be attributed and land in the **"Non attribuito"** column, never silently spread across growers |
 | Filters | As Report 1 — **Tipologia and Produzione mandatory**, Codice varietà and Codice portainnesto optional — **plus Produttore**. Choosing a grower keeps only the combinations that involve them and highlights that column; their column total does not change, since filtered-out rows contributed zero |
-| Layout | **Flat list**, one row per combination — no rootstock grouping and no per-rootstock subtotals (PD-2, §15.3) |
+| Layout | **Flat list**, one row per combination, with the **same per-rootstock subtotals as Report 1** (PD-7): no group headers, a subtotal row as the first row of each rootstock group |
 | Columns | Codice clone · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità · 8 grower columns — **no «Non attribuito», no «Totale produttori»** (PD-4: every commitment is placed against a lot, so every record has a producer) |
 | Columns total | 6 + 8 = **14** |
 | Sort | by rootstock, then clone (as Report 1) |
-| Totals | one **"Totale generale"** row summing every column |
+| Totals | a **"Totale per portainnesto"** row opening each rootstock group, summing **every** column — the eight grower columns included — then one **"Totale generale"** row |
 | Self-check | "Totale produttori" must equal the grower columns sum; a mismatch (possible only from unattributed orders) is shown as a reconciliation note with the amount |
 
 **Report 4 — Da spedire** (Admin, Amministrazione)
 
 | Aspect | Specification |
 |---|---|
-| Purpose | The commitments still to be shipped, reached from the «Da spedire» KPI on the home screen |
+| Purpose | The commitments still to be shipped, reached from the «Da spedire» KPI on the home screen (Admin, Amministrazione) — the **producer** panorama neither shows the KPI nor a shortcut to this report (PD-7) |
 | Row set | `ordini_impegni` with `spedito = FALSE`, after the filters |
 | Filters | **Tipologia and Produzione mandatory** (as Report 1); Codice varietà and Codice portainnesto optional |
 | Columns | Codice clone (+ variety) · Codice portainnesto · Lotto collegato (produttore · anno) · Quantità |
@@ -323,9 +324,24 @@ Null-dimension handling
 |---|---|
 | Row set | Only keys where `Magazzino − Ordinato < 0` |
 | Columns | Tipologia · Produzione · Codice varietà · Codice clone · Codice portainnesto · Magazzino · Ordinato · **Deficit** |
-| Sort | `codice_varieta` → `codice_portainnesto` → `codice_clone` (exactly as required) |
+| Sort | `codice_portainnesto` → `codice_clone` → `codice_varieta`, so the groups are contiguous (PD-7) |
 | Emphasis | Deficit bold red with leading `−`, red left border, red row tint; count badge in the header |
+| Totals | **"Totale per portainnesto"** row opening each rootstock group (magazzino, ordinato and the summed deficit, shown negative), exactly like Report 1 (PD-7). There is no grand total row: the banner above the table carries the overall deficit |
 | Empty | Green "nessuna indisponibilità" state |
+
+**Report 5 — Messo a disposizione** (Produttore)
+
+| Aspect | Specification |
+|---|---|
+| Purpose | Answers "what did **I** put into the warehouse, and what is still committed against it?" — the producer's own side of the availability picture |
+| Row set | The lots whose `produttore` is the grower linked to the signed-in profile, with the commitments recorded on those lots (`ordini_impegni.id_magazzino → lotti_magazzino`). Served by the `vista_messo_a_disposizione` view, which filters by `auth_grower()` **inside** the definition (migration 005) |
+| Filters | **Tipologia and Produzione mandatory** (same defaults as Report 1), Codice varietà and Codice portainnesto optional. There is **no produttore filter**: the producer is the session |
+| Layout | Identical to Report 1 — flat list, the **subtotal row opens each rootstock group** (PD-7) |
+| Columns | Codice clone (+ variety) · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità |
+| Sort / Totals | as Report 1 (rootstock → clone; per-rootstock subtotals first, then the "Totale generale" row) |
+| Emphasis | Disponibilità < 0 → red, exactly as in Report 1 |
+| Export | CSV of the filtered rows plus the subtotals, same columns as Report 1 |
+| Empty | No records → empty state naming the producer; **no producer linked to the profile** → an explanatory state pointing at Utenti |
 
 ### 3.7 Validation rules
 
@@ -1059,7 +1075,7 @@ Every screen below states: purpose · roles · entry · layout zones · componen
 | **Entry** | Sidebar → Dati → Lotti magazzino; Home quick action; deep link `/dati/lotti` |
 | **Guard** | `< 1024 dp` → renders **S-13L** (see below) |
 
-**Layout** — shell (C-03) · top bar `Dati / Lotti magazzino` · toolbar: search field, filters (Produttore, Tipologia, Produzione, Varietà, date range), `Nuovo lotto` (primary), `Importa Excel` (secondary), `Esporta`, column chooser · data grid (C-10) · optional right drawer form (C-26).
+**Layout** — shell (C-03) · top bar `Dati / Lotti magazzino` · toolbar: search field, filters (Produttore, Tipologia, Produzione, Varietà, date range), `Esporta CSV` (secondary — the **whole filtered list**, not just the page on screen, with the same headers the import accepts plus `id`), `Importa CSV` (secondary), `Nuovo lotto` (primary) · data grid (C-10).
 
 **Grid columns**
 
@@ -1120,7 +1136,7 @@ App bar "Dati" + a centred card: lock icon, title "Inserimento dati disponibile 
 | **Roles** | Admin, Amministrazione |
 | **Entry** | Sidebar → Dati → Ordini e impegni; Home quick action `/dati/ordini` |
 
-**Layout** — identical structure to S-13 (toolbar, grid, drawer), with these differences:
+**Layout** — identical structure to S-13 (toolbar with `Esporta CSV` and `Importa CSV`, grid, drawer), with these differences:
 
 | Column | Type | Notes |
 |---|---|---|
@@ -1130,7 +1146,7 @@ App bar "Dati" + a centred card: lock icon, title "Inserimento dati disponibile 
 | Codice varietà · clone · portainnesto | mono | same validation as lots |
 | Quantità ordinata | integer, right | F-V4 |
 | Spedito | **toggle (C-16)** | inline editable; toggling stamps a `brand-50` row tint and an undo toast. There is **no shipment date** in the schema (F-V7) |
-| Note | text | truncated with tooltip |
+| Note | text | **shown in full in read mode**, wrapped inside the cell (no truncation, no tooltip needed): the office reads the delivery instructions straight from the list |
 | Azioni | icons | Modifica · Elimina |
 
 **Drawer fields** (in schema order, §3.4) — Lotto collegato (searchable lot picker prefilling the dimensions) · Tipologia · Produzione · Codice varietà (searchable) · Codice clone (dependent) · Codice portainnesto · Quantità ordinata · **Spedito** switch · Note. Error actions `Segna come spedito` ignore the dimensions and only flip `spedito`.
@@ -1506,6 +1522,7 @@ Status after reconciling `docs/db-schema.sql`.
 
 | # | Decision | Rationale | Effect |
 |---|---|---|---|
+| **PD-7** | **The per-rootstock subtotal opens its group instead of closing it** (Report 1, 3, 2 and the new Report 5), Report 2 and Report 3 gain the same subtotal logic, Report 3 is re-sorted rootstock-first, the note reaches the read grid of S-14 with a CSV export on S-13 and S-14, and the producer panorama drops «Da spedire» in favour of the new **Messo a disposizione** report | The office reads a group from its total down to the single clones: with the subtotal at the end the eye has to jump back, and on a phone the total landed after the content it summarised. Report 3 had the same need but its variety-first sort made the groups non-contiguous, hence the new order. A producer does not ship: the «Da spedire» shortcut was noise on their phone, while “what did I make available?” is the only question that profile asks, and it must be answered without exposing the other producers' rows | Supersedes the “no subtotals in Report 2” part of PD-2/PD-4 and the subtotal-at-end rule of PD-3; adds S-23 and migration 005. The draw.io mockup (pages 03–05) still shows the pre-PD-7 subtotal position and has no S-23 page |
 | **PD-6** | **Creating a user is part of the GUI, with a one-time password (plus an optional e-mail link)** instead of a mail-only invitation. The screen also gains *Sospendi/Riattiva* and a password reset that returns a fresh one-time password | The owner operates the site alone and has no Supabase console workflow: a plain "send an invitation e-mail" needed a hosted mailer and produced 2-per-hour limits during testing. A password generated in the database and shown once gets a new colleague working in seconds, and the e-mail option stays available when SMTP is configured | Supersedes the "the Admin never sees or sets a password" rule of S-19; the mockup page 07 still shows the pre-PD-6 grid |
 | **PD-3** | Report 1 keeps the flat list but **regains a subtotal row per rootstock** ("Totale per portainnesto", bold, tinted) and **drops the «Da spedire» column**; Tipologia and Produzione become **mandatory** filters with defaults | The office asked for the per-rootstock total back while keeping the filterable list; «Da spedire» duplicated a derived value and now has its own report; the two dimensions are not shown in the table, so they cannot be left ambiguous | Supersedes part of PD-1 |
 | **PD-5** | **Anagrafica vite is no longer grouped by variety**: it is a flat list with a searchable **Varietà** filter (plus a clone search) | With 4 786 pairs the group headers made the screen long and hard to scan; a filter answers "show me this variety's clones" in one step, and the variety stays visible as a column | Supersedes the grouped layout of S-16 |

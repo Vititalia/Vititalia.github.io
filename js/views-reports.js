@@ -134,6 +134,8 @@ function launcherGroups(s, role, isPC) {
         title: 'Indisponibilità', sub: 'Solo i deficit', badge: s.negativeCount, badgeTone: 'danger' },
       { cap: 'r.daspedire', href: '#/r/daspedire', icon: 'truck',
         title: 'Da spedire', sub: 'Impegni da evadere', badge: s.ordiniNonSpediti },
+      { cap: 'r.messodisposizione', href: '#/r/messodisposizione', icon: 'leaf',
+        title: 'Messo a disposizione', sub: 'I tuoi conferimenti' },
     ] },
     { title: 'Dati', items: [
       { cap: 'dati.lotti', href: '#/dati/lotti', icon: 'edit',
@@ -184,7 +186,8 @@ export function viewHome(root, ctx) {
       <p class="eyebrow">Panoramica</p>
       <h1>${ctx.user ? U.esc(ctx.user.name.split(' ')[0]) + ', ' : ''}da dove vuoi iniziare?</h1>
       <p class="sub">${U.esc(P.roleLabel(ctx.role))} · ${tileCount} sezioni disponibili ·
-        ${s.lotti} lotti · ${s.ordiniNonSpediti} impegni non spediti</p>
+        ${U.fmtQty(s.lotti)} lotti${P.can(ctx.role, 'r.daspedire')
+          ? ` · ${U.fmtQty(s.ordiniNonSpediti)} impegni non spediti` : ''}</p>
     </div></div>
 
     <div class="kpis kpis-compact">
@@ -309,100 +312,9 @@ function reportShell(root, { eyebrow, title, sub, actions = '' }) {
 }
 
 /* ----------------------------------------------- S-04/S-05 disponibilità */
-export function viewDisponibilita(root, ctx) {
-  const f = parseFilters(ctx.params, { mandatory: true });
-  const r = S.reportDisponibilita(f);
-  const table = wantsTableView(ctx);
-  reportShell(root, {
-    eyebrow: 'Riepiloghi / Disponibilità',
-    title: 'Riepilogo disponibilità',
-    sub: `${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo`,
-    actions: `${viewToggle(ctx, table)}
-      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
-  });
-  filterBar(root.querySelector('#filterHost'), f,
-    (next) => ctx.navigate('#/r/disponibilita' + serializeFilters(next)),
-    { showPortainnesto: true, mandatory: ['tipologia', 'produzione'] });
-
-  const rows = [];
-  let prevRoot = null;
-  for (const row of r.rows) {
-    if (prevRoot !== null && row.portainnesto !== prevRoot) {
-      rows.push(subtotalRow(r.subtotals.get(prevRoot)));
-    }
-    prevRoot = row.portainnesto;
-    const neg = row.disponibilita < 0;
-    rows.push({
-      type: 'row',
-      cls: neg ? 'trow negative' : 'trow',
-      cells: [
-        { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
-        U.metric('Magazzino', U.fmtQty(row.mag)),
-        U.metric('Ordinato', U.fmtQty(row.ord)),
-        U.metric('Di cui spedito', U.fmtQty(row.sped)),
-        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
-      ],
-    });
-  }
-  if (prevRoot !== null) rows.push(subtotalRow(r.subtotals.get(prevRoot)));
-  if (r.rows.length) {
-    rows.push({
-      type: 'total',
-      cells: [
-        { html: 'Totale generale', cls: 'ident' },
-        { html: '', label: 'Portainnesto', cls: 'cell-sub' },
-        { html: U.fmtQty(r.totals.mag), cls: 'r metric', label: 'Magazzino' },
-        { html: U.fmtQty(r.totals.ord), cls: 'r metric', label: 'Ordinato' },
-        { html: U.fmtQty(r.totals.sped), cls: 'r metric', label: 'Di cui spedito' },
-        { html: `<span class="${r.totals.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(r.totals.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
-      ],
-    });
-  }
-
-  const host = root.querySelector('#reportHost');
-  if (!r.rows.length) {
-    host.innerHTML = U.emptyState({
-      icon: '◇', title: 'Nessun dato con i filtri selezionati',
-      text: 'Prova un\'altra varietà o portainnesto.', action: 'Rimuovi i filtri facoltativi',
-    });
-    host.querySelector('[data-empty-action]').addEventListener('click',
-      () => ctx.navigate('#/r/disponibilita'));
-  } else {
-    host.innerHTML = `<div class="report${table ? ' table-mode' : ''}">${U.buildTable({
-      scroll: table,
-      caption: {
-        wide: 'Un rigo per combinazione, con il totale per portainnesto in evidenza. Rosso = disponibilità negativa.',
-        narrow: 'Un rigo per clone, con il totale per portainnesto in evidenza.',
-      },
-      cols: [{ label: 'Codice clone' }, { label: 'Codice portainnesto' }, { label: 'Magazzino', align: 'r' },
-             { label: 'Ordinato', align: 'r' }, { label: 'Di cui spedito', align: 'r' },
-             { label: 'Disponibilità', align: 'r' }],
-      rows,
-    })}</div>`;
-  }
-
-  root.querySelector('#exportBtn').addEventListener('click', () => {
-    const out = [];
-    let prev = null;
-    for (const row of r.rows) {
-      if (prev !== null && row.portainnesto !== prev) {
-        const t = r.subtotals.get(prev);
-        out.push(['Totale per portainnesto', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
-      }
-      prev = row.portainnesto;
-      out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped, row.disponibilita]);
-    }
-    if (prev !== null) {
-      const t = r.subtotals.get(prev);
-      out.push(['Totale per portainnesto', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
-    }
-    out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita]);
-    U.exportCSV(`disponibilita_${U.nowStamp()}.csv`,
-      ['Codice clone', 'Codice varietà', 'Codice portainnesto', 'Magazzino', 'Ordinato',
-       'Di cui spedito', 'Disponibilità'], out);
-  });
-}
+/* Report 1 and report 5 («Messo a disposizione») share this rendering: one
+ * subtotal per rootstock *at the start of its group*, then the per-clone
+ * lines it summarises (PD-7). */
 
 function subtotalRow(t) {
   return {
@@ -418,12 +330,216 @@ function subtotalRow(t) {
   };
 }
 
+function cloneRow(row) {
+  const neg = row.disponibilita < 0;
+  return {
+    type: 'row',
+    cls: neg ? 'trow negative' : 'trow',
+    cells: [
+      { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+      { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+      U.metric('Magazzino', U.fmtQty(row.mag)),
+      U.metric('Ordinato', U.fmtQty(row.ord)),
+      U.metric('Di cui spedito', U.fmtQty(row.sped)),
+      U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
+    ],
+  };
+}
+
+function grandTotalRow(totals) {
+  return {
+    type: 'total',
+    cells: [
+      { html: 'Totale generale', cls: 'ident' },
+      { html: '', label: 'Portainnesto', cls: 'cell-sub' },
+      { html: U.fmtQty(totals.mag), cls: 'r metric', label: 'Magazzino' },
+      { html: U.fmtQty(totals.ord), cls: 'r metric', label: 'Ordinato' },
+      { html: U.fmtQty(totals.sped), cls: 'r metric', label: 'Di cui spedito' },
+      { html: `<span class="${totals.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(totals.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
+    ],
+  };
+}
+
+/** Subtotal first, then its per-clone lines, and one grand total at the end. */
+function availabilityRows(r) {
+  const out = [];
+  let prev = null;
+  for (const row of r.rows) {
+    if (row.portainnesto !== prev) {
+      out.push(subtotalRow(r.subtotals.get(row.portainnesto)));
+      prev = row.portainnesto;
+    }
+    out.push(cloneRow(row));
+  }
+  if (r.rows.length) out.push(grandTotalRow(r.totals));
+  return out;
+}
+
+function availabilityCsvRows(r) {
+  const out = [];
+  let prev = null;
+  for (const row of r.rows) {
+    if (row.portainnesto !== prev) {
+      const t = r.subtotals.get(row.portainnesto);
+      out.push(['Totale per portainnesto', '', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
+      prev = row.portainnesto;
+    }
+    out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped, row.disponibilita]);
+  }
+  out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita]);
+  return out;
+}
+
+const AVAILABILITY_COLS = [{ label: 'Codice clone' }, { label: 'Codice portainnesto' },
+  { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
+  { label: 'Di cui spedito', align: 'r' }, { label: 'Disponibilità', align: 'r' }];
+
+const AVAILABILITY_CSV_HEADERS = ['Codice clone', 'Codice varietà', 'Codice portainnesto',
+  'Magazzino', 'Ordinato', 'Di cui spedito', 'Disponibilità'];
+
+export function viewDisponibilita(root, ctx) {
+  const f = parseFilters(ctx.params, { mandatory: true });
+  const r = S.reportDisponibilita(f);
+  const table = wantsTableView(ctx);
+  reportShell(root, {
+    eyebrow: 'Riepiloghi / Disponibilità',
+    title: 'Riepilogo disponibilità',
+    sub: `${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo`,
+    actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
+  });
+  filterBar(root.querySelector('#filterHost'), f,
+    (next) => ctx.navigate('#/r/disponibilita' + serializeFilters(next)),
+    { showPortainnesto: true, mandatory: ['tipologia', 'produzione'] });
+
+  const host = root.querySelector('#reportHost');
+  if (!r.rows.length) {
+    host.innerHTML = U.emptyState({
+      icon: '◇', title: 'Nessun dato con i filtri selezionati',
+      text: 'Prova un\'altra varietà o portainnesto.', action: 'Rimuovi i filtri facoltativi',
+    });
+    host.querySelector('[data-empty-action]').addEventListener('click',
+      () => ctx.navigate('#/r/disponibilita'));
+  } else {
+    host.innerHTML = `<div class="report${table ? ' table-mode' : ''}">${U.buildTable({
+      scroll: table,
+      caption: {
+        wide: 'Prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.',
+        narrow: 'Prima il totale del portainnesto, poi i cloni.',
+      },
+      cols: AVAILABILITY_COLS,
+      rows: availabilityRows(r),
+    })}</div>`;
+  }
+
+  root.querySelector('#exportBtn').addEventListener('click', () => {
+    U.exportCSV(`disponibilita_${U.nowStamp()}.csv`, AVAILABILITY_CSV_HEADERS, availabilityCsvRows(r));
+  });
+}
+
+/* --------------------------------- S-23 «Messo a disposizione» (produttore) */
+/** Same table as Report 1, limited to the lots the signed-in producer supplied. */
+export function viewMessoADisposizione(root, ctx) {
+  const f = parseFilters(ctx.params, { mandatory: true });
+  const grower = (ctx.session && ctx.session.grower) || null;
+  delete f.produttore;            // the producer is the session, never a filter
+  const r = S.reportMessoADisposizione(f, grower);
+  const table = wantsTableView(ctx);
+  reportShell(root, {
+    eyebrow: 'Riepiloghi / Messo a disposizione',
+    title: 'Messo a disposizione',
+    sub: grower
+      ? `${U.esc(grower)} · ${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo`
+      : 'Nessun produttore collegato a questo profilo',
+    actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn"${r.rows.length ? '' : ' disabled'}>Esporta CSV</button>`,
+  });
+  filterBar(root.querySelector('#filterHost'), f,
+    (next) => ctx.navigate('#/r/messodisposizione' + serializeFilters(next)),
+    { showPortainnesto: true, mandatory: ['tipologia', 'produzione'] });
+
+
+  const host = root.querySelector('#reportHost');
+  if (!grower) {
+    host.innerHTML = U.emptyState({
+      icon: '🔒', title: 'Profilo senza produttore collegato',
+      text: 'Questo riepilogo mostra i conferimenti del produttore collegato al profilo. Chiedi a un amministratore di impostarlo in Utenti.',
+      action: 'Torna alla panoramica',
+    });
+    host.querySelector('[data-empty-action]').addEventListener('click', () => ctx.navigate('#/home'));
+    return;
+  }
+  if (!r.rows.length) {
+    host.innerHTML = U.emptyState({
+      icon: '◇', title: 'Nessun conferimento con i filtri selezionati',
+      text: `Non risultano lotti di ${grower} per questa tipologia e produzione.`,
+      action: 'Rimuovi i filtri facoltativi',
+    });
+    host.querySelector('[data-empty-action]').addEventListener('click',
+      () => ctx.navigate('#/r/messodisposizione'));
+  } else {
+    host.innerHTML = `
+      <div class="banner banner-info"><span aria-hidden="true">i</span>
+        <span>Solo i lotti conferiti da <b>${U.esc(grower)}</b>, con gli impegni registrati su quei lotti.
+        Il totale del portainnesto precede i cloni che lo compongono.</span></div>
+      <div class="report${table ? ' table-mode' : ''}">${U.buildTable({
+        scroll: table,
+        caption: {
+          wide: 'Prima il totale del portainnesto, poi i cloni conferiti da te. Rosso = disponibilità negativa.',
+          narrow: 'Prima il totale del portainnesto, poi i tuoi cloni.',
+        },
+        cols: AVAILABILITY_COLS,
+        rows: availabilityRows(r),
+      })}</div>`;
+  }
+
+  root.querySelector('#exportBtn').addEventListener('click', () => {
+    U.exportCSV(`messo_a_disposizione_${U.nowStamp()}.csv`,
+      AVAILABILITY_CSV_HEADERS, availabilityCsvRows(r));
+  });
+}
+
 /* ------------------------------------------- S-06/S-07 per produttore */
+function perProduttoreCells(row, growers, hl) {
+  return [
+    { html: `${row.disponibilita < 0 ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+    { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+    U.metric('Magazzino', U.fmtQty(row.mag)),
+    U.metric('Ordinato', U.fmtQty(row.ord)),
+    U.metric('Di cui spedito', U.fmtQty(row.sped)),
+    U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: row.disponibilita < 0, cls: 'disp' }),
+    ...growers.map((g) => U.metric(g, U.fmtSigned(row.per[g]), { negative: row.per[g] < 0, cls: 'grower' })),
+  ].map((c, i) => {
+    const g = growers[i - 6];
+    return g && hl(g) ? { ...c, cls: ((c.cls || '') + ' grower-hl').trim() } : c;
+  });
+}
+
+function perProduttoreSubtotalRow(t, growers, hl) {
+  return {
+    type: 'subtotal',
+    cells: [
+      { html: 'Totale per portainnesto', cls: 'ident' },
+      { html: `<span class="ident">${U.esc(t.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+      { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Magazzino' },
+      { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
+      { html: U.fmtQty(t.sped), cls: 'r metric', label: 'Di cui spedito' },
+      { html: `<span class="${t.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(t.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
+      ...growers.map((g) => ({
+        html: U.fmtSigned(t.per[g]),
+        cls: `r metric grower${t.per[g] < 0 ? ' neg' : ''}${hl(g)}`,
+        label: g,
+      })),
+    ],
+  };
+}
+
 export function viewPerProduttore(root, ctx) {
   const f = parseFilters(ctx.params, { mandatory: true });
   const r = S.reportPerProduttore(f);
   const table = wantsTableView(ctx);
   const unattributed = r.rows.filter((row) => row.nonAttr !== 0).length;
+  const hl = (g) => (f.produttore && g === f.produttore ? ' grower-hl' : '');
 
   reportShell(root, {
     eyebrow: 'Riepiloghi / Per produttore',
@@ -436,7 +552,6 @@ export function viewPerProduttore(root, ctx) {
     (next) => ctx.navigate('#/r/produttore' + serializeFilters(next)),
     { showPortainnesto: true, showProduttore: true, mandatory: ['tipologia', 'produzione'] });
 
-  const hl = (g) => (f.produttore && g === f.produttore ? ' grower-hl' : '');
   const cols = [
     { label: 'Codice clone' }, { label: 'Codice portainnesto' },
     { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
@@ -444,25 +559,20 @@ export function viewPerProduttore(root, ctx) {
     ...r.growers.map((g) => ({ label: g, align: 'r', cls: hl(g).trim() })),
   ];
 
-  const rows = r.rows.map((row) => {
-    const neg = row.disponibilita < 0;
-    const cells = [
-      { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-      { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
-      U.metric('Magazzino', U.fmtQty(row.mag)),
-      U.metric('Ordinato', U.fmtQty(row.ord)),
-      U.metric('Di cui spedito', U.fmtQty(row.sped)),
-      U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
-      ...r.growers.map((g) => U.metric(g, U.fmtSigned(row.per[g]), { negative: row.per[g] < 0, cls: 'grower' })),
-    ].map((c, i) => {
-      const gIdx = i - 6;
-      if (f.produttore && gIdx >= 0 && gIdx < r.growers.length && r.growers[gIdx] === f.produttore) {
-        return { ...c, cls: ((c.cls || '') + ' grower-hl').trim() };
-      }
-      return c;
+  // subtotal at the start of each rootstock group, then its per-clone lines
+  const rows = [];
+  let prev = null;
+  for (const row of r.rows) {
+    if (row.portainnesto !== prev) {
+      rows.push(perProduttoreSubtotalRow(r.subtotals.get(row.portainnesto), r.growers, hl));
+      prev = row.portainnesto;
+    }
+    rows.push({
+      type: 'row',
+      cls: row.disponibilita < 0 ? 'trow negative' : 'trow',
+      cells: perProduttoreCells(row, r.growers, hl),
     });
-    return { type: 'row', cls: neg ? 'trow negative' : 'trow', cells };
-  });
+  }
   if (r.rows.length) {
     rows.push({
       type: 'total',
@@ -500,15 +610,25 @@ export function viewPerProduttore(root, ctx) {
       scroll: true,
       tableClass: 'matrix',
       caption: {
-        wide: 'Disponibilità per produttore, un rigo per combinazione. Le prime due colonne restano visibili allo scorrimento orizzontale; la colonna del produttore filtrato è evidenziata.',
-        narrow: 'Disponibilità per produttore. La colonna del produttore filtrato è evidenziata.',
+        wide: 'Prima il totale del portainnesto (colonne dei produttori comprese), poi un rigo per combinazione. Le prime due colonne restano visibili allo scorrimento orizzontale; la colonna del produttore filtrato è evidenziata.',
+        narrow: 'Prima il totale del portainnesto, poi le combinazioni. La colonna del produttore filtrato è evidenziata.',
       },
       cols, rows,
     })}</div>`;
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
-    const out = r.rows.map((row) => [row.clone, row.varieta, row.portainnesto,
-      row.mag, row.ord, row.sped, row.disponibilita, ...r.growers.map((g) => row.per[g])]);
+    const out = [];
+    let prevRoot = null;
+    for (const row of r.rows) {
+      if (row.portainnesto !== prevRoot) {
+        const t = r.subtotals.get(row.portainnesto);
+        out.push(['Totale per portainnesto', '', t.portainnesto, t.mag, t.ord, t.sped,
+          t.disponibilita, ...r.growers.map((g) => t.per[g])]);
+        prevRoot = row.portainnesto;
+      }
+      out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped,
+        row.disponibilita, ...r.growers.map((g) => row.per[g])]);
+    }
     out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped,
       r.totals.disponibilita, ...r.growers.map((g) => r.totals.per[g])]);
     U.exportCSV(`disponibilita_per_produttore_${U.nowStamp()}.csv`,
@@ -526,8 +646,8 @@ export function viewIndisponibilita(root, ctx) {
     eyebrow: 'Riepiloghi / Indisponibilità',
     title: 'Indisponibilità',
     sub: r.count
-      ? `${r.count} articoli in deficit · deficit totale ${U.fmtQty(r.deficitTot)} · ordinato per varietà → portainnesto → clone`
-      : 'Ordinato per varietà → portainnesto → clone',
+      ? `${r.count} articoli in deficit · deficit totale ${U.fmtQty(r.deficitTot)} · ordinato per portainnesto → clone`
+      : 'Ordinato per portainnesto → clone',
     actions: `${viewToggle(ctx, table)}
       <button class="btn btn-secondary btn-sm" type="button" id="exportBtn"${r.count ? '' : ' disabled'}>Esporta CSV</button>`,
   });
@@ -546,25 +666,49 @@ export function viewIndisponibilita(root, ctx) {
     return;
   }
 
-  const rows = r.rows.map((row) => ({
-    type: 'row', cls: 'trow negative',
+  const subRow = (t) => ({
+    type: 'subtotal',
     cells: [
-      { html: `⚠ ${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-      { html: U.esc(row.tipologia), label: 'Tipologia', cls: 'ctx' },
-      { html: U.esc(row.produzione), label: 'Produzione', cls: 'ctx' },
-      { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
-      U.metric('Magazzino', U.fmtQty(row.mag)),
-      U.metric('Ordinato', U.fmtQty(row.ord)),
-      U.metric('Deficit', '\u2212' + U.fmtQty(row.deficit), { negative: true, cls: 'disp' }),
+      { html: 'Totale per portainnesto', cls: 'ident' },
+      { html: '', label: 'Tipologia', cls: 'ctx' },
+      { html: '', label: 'Produzione', cls: 'ctx' },
+      { html: `<span class="ident">${U.esc(t.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+      { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Magazzino' },
+      { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
+      { html: `<span class="neg">\u2212${U.fmtQty(t.deficit)}</span>`, cls: 'r metric', label: 'Deficit' },
     ],
-  }));
+  });
+
+  const rows = [];
+  let prev = null;
+  for (const row of r.rows) {
+    if (row.portainnesto !== prev) {
+      rows.push(subRow(r.subtotals.get(row.portainnesto)));
+      prev = row.portainnesto;
+    }
+    rows.push({
+      type: 'row', cls: 'trow negative',
+      cells: [
+        { html: `⚠ ${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+        { html: U.esc(row.tipologia), label: 'Tipologia', cls: 'ctx' },
+        { html: U.esc(row.produzione), label: 'Produzione', cls: 'ctx' },
+        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+        U.metric('Magazzino', U.fmtQty(row.mag)),
+        U.metric('Ordinato', U.fmtQty(row.ord)),
+        U.metric('Deficit', '\u2212' + U.fmtQty(row.deficit), { negative: true, cls: 'disp' }),
+      ],
+    });
+  }
 
   host.innerHTML = `
     <div class="banner banner-error"><span aria-hidden="true">⚠</span>
       <span><b>${r.count} articoli</b> con disponibilità negativa · deficit totale <b>${U.fmtQty(r.deficitTot)}</b></span></div>
     <div class="report${table ? ' table-mode' : ''}">${U.buildTable({
       scroll: table,
-      caption: 'Il deficit è |magazzino − ordinato| mostrato con il segno meno.',
+      caption: {
+        wide: 'Prima il totale del portainnesto, poi i cloni in deficit. Il deficit è |magazzino − ordinato| mostrato con il segno meno.',
+        narrow: 'Prima il totale del portainnesto, poi i cloni in deficit.',
+      },
       cols: [{ label: 'Codice clone' }, { label: 'Tipologia' }, { label: 'Produzione' },
              { label: 'Portainnesto' }, { label: 'Magazzino', align: 'r' },
              { label: 'Ordinato', align: 'r' }, { label: 'Deficit', align: 'r' }],
@@ -572,9 +716,19 @@ export function viewIndisponibilita(root, ctx) {
     })}</div>`;
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
+    const out = [];
+    let prevRoot = null;
+    for (const x of r.rows) {
+      if (x.portainnesto !== prevRoot) {
+        const t = r.subtotals.get(x.portainnesto);
+        out.push(['Totale per portainnesto', '', '', '', t.portainnesto, t.mag, t.ord, -t.deficit]);
+        prevRoot = x.portainnesto;
+      }
+      out.push([x.clone, x.tipologia, x.produzione, x.varieta, x.portainnesto, x.mag, x.ord, -x.deficit]);
+    }
     U.exportCSV(`indisponibilita_${U.nowStamp()}.csv`,
-      ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone', 'Codice portainnesto', 'Magazzino', 'Ordinato', 'Deficit'],
-      r.rows.map((x) => [x.tipologia, x.produzione, x.varieta, x.clone, x.portainnesto, x.mag, x.ord, -x.deficit]));
+      ['Codice clone', 'Tipologia', 'Produzione', 'Codice varietà', 'Codice portainnesto',
+       'Magazzino', 'Ordinato', 'Deficit'], out);
   });
 }
 

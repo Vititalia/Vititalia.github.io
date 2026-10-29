@@ -18,6 +18,7 @@ export const MATRIX = [
   { cap: 'Riepilogo per produttore', v: { admin: 'R', ufficio: 'R', produttore: '—', vendite: '—' } },
   { cap: 'Indisponibilità',         v: { admin: 'R', ufficio: 'R', produttore: 'R', vendite: '—' } },
   { cap: 'Da spedire',              v: { admin: 'R', ufficio: 'R', produttore: '—', vendite: '—' } },
+  { cap: 'Messo a disposizione',    v: { admin: '—', ufficio: '—', produttore: 'R', vendite: '—' } },
   { cap: 'Lotti magazzino',         v: { admin: 'E', ufficio: 'E', produttore: '—', vendite: '—' } },
   { cap: 'Ordini e impegni',        v: { admin: 'E', ufficio: 'E', produttore: '—', vendite: '—' } },
   { cap: 'Import CSV/Excel',        v: { admin: 'E', ufficio: 'E', produttore: '—', vendite: '—' } },
@@ -34,12 +35,13 @@ export const CAPS = {
   /* what the home screen shows, per role */
   'home.lots.producer': { admin: 1, ufficio: 1 },          // grower column in «ultimi lotti»
   'home.kpi.indisponibilita': { admin: 1, ufficio: 1, produttore: 1 },
-  'home.kpi.daspedire': { admin: 1, ufficio: 1, produttore: 1 },
+  'home.kpi.daspedire': { admin: 1, ufficio: 1 },            // not the producer's panorama (PD-7)
 
   'r.disponibilita': { admin: 1, ufficio: 1, produttore: 1, vendite: 1 },
   'r.produttore': { admin: 1, ufficio: 1 },
   'r.indisponibilita': { admin: 1, ufficio: 1, produttore: 1 },
   'r.daspedire': { admin: 1, ufficio: 1 },
+  'r.messodisposizione': { produttore: 1 },               // own lots only, see migration 005
 
   'dati.lotti': { admin: 1, ufficio: 1 },
   'dati.ordini': { admin: 1, ufficio: 1 },

@@ -268,7 +268,8 @@ for (const w of [1024, 1440, 1920]) {
       totals: t.querySelectorAll('tbody tr.total').length,
     };
   });
-  ok(m.groups === 0 && m.subs === 0, `per-grower report is flat too (${m.groups} groups, ${m.subs} subtotals)`);
+  ok(m.groups === 0, `per-grower report has no group headers (${m.groups})`);
+  ok(m.subs > 0, `per-grower report carries a subtotal per rootstock (${m.subs})`);
   ok(m.totals === 1, `per-grower report has one grand total (${m.totals})`);
   await ctx.close();
 }
@@ -749,6 +750,124 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   ok(!d.locked, '«Da spedire» is not gated to PC');
   ok(d.cards > 0, `«Da spedire» renders cards on a phone (${d.cards})`);
   ok(d.toggle, '«Da spedire» has the cards/table switch');
+  await ctx.close();
+}
+
+/* ------------------- subtotal first, notes, producer report ---------------- */
+{
+  // report 1, per produttore: the subtotal opens the group (PD-7)
+  for (const [route, label, cells] of [['#/r/disponibilita', 'disponibilità', 6],
+                                       ['#/r/indisponibilita', 'indisponibilità', 7],
+                                       ['#/r/produttore', 'per produttore', 14]]) {
+    const { page, ctx } = await open({ width: 1440, height: 1000 }, route);
+    const d = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('.grid tbody tr')];
+      const first = rows[0];
+      const sub = rows.find((r) => r.classList.contains('subtotal'));
+      const after = sub ? sub.nextElementSibling : null;
+      const td = (tr) => [...tr.querySelectorAll('td')];
+      const codeOf = (tr) => {
+        const td2 = tr.querySelector('td[data-label="Portainnesto"]');
+        return td2 ? td2.textContent.trim() : null;
+      };
+      return {
+        firstIsSubtotal: first ? first.classList.contains('subtotal') : false,
+        subCells: sub ? td(sub).length : 0,
+        subCode: sub ? codeOf(sub) : null,
+        nextCode: after ? codeOf(after) : null,
+        subFirstCol: sub ? td(sub)[0].textContent.trim() : '',
+        sticky: !!document.querySelector('.grid.matrix thead th'),
+      };
+    });
+    ok(d.firstIsSubtotal, `${label}: subtotal row first in the group`);
+    ok(d.subCells === cells, `${label}: subtotal carries ${cells} cells (${d.subCells})`);
+    ok(d.subCode && d.subCode === d.nextCode,
+       `${label}: the subtotal belongs to the cloni that follow (${d.subCode} / ${d.nextCode})`);
+    ok(/Totale per portainnesto/.test(d.subFirstCol), `${label}: labelled «Totale per portainnesto»`);
+    await ctx.close();
+  }
+
+  // ordini: the note column is readable and does not stretch the page
+  const { page, ctx } = await open({ width: 1440, height: 1000 }, '#/dati/ordini');
+  const ord = await page.evaluate(() => {
+    const th = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
+    const cell = document.querySelector('.grid tbody tr.trow td.note-cell');
+    const csv = [...document.querySelectorAll('.page-head .btn')].map((b) => b.textContent.trim());
+    return {
+      th, hasNoteCell: !!cell,
+      wrap: cell ? getComputedStyle(cell).whiteSpace : null,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      buttons: csv,
+    };
+  });
+  ok(ord.th.includes('Note'), `ordini: Note column in the header (${ord.th.join(' · ')})`);
+  ok(ord.hasNoteCell, 'ordini: every row has a note cell');
+  ok(ord.wrap === 'pre-wrap', `ordini: notes keep their line breaks (${ord.wrap})`);
+  ok(ord.buttons.includes('Esporta CSV'), `ordini: Esporta CSV button (${ord.buttons.join(' · ')})`);
+  ok(ord.overflow <= 1, `ordini: the wider table still fits the page (${ord.overflow}px)`);
+  await ctx.close();
+
+  const lotti = await open({ width: 1440, height: 1000 }, '#/dati/lotti');
+  const lotBtns = await lotti.page.evaluate(() =>
+    [...document.querySelectorAll('.page-head .btn')].map((b) => b.textContent.trim()));
+  ok(lotBtns.includes('Esporta CSV'), `lotti: Esporta CSV button (${lotBtns.join(' · ')})`);
+  await lotti.ctx.close();
+}
+
+/* producer phone: cards, subtotal first, no «da spedire» */
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.addInitScript(() => {
+    try {
+      localStorage.setItem('vignero.session.v1', JSON.stringify({
+        userId: 'u-produttore', email: 'produttore@vignero.it', name: 'Marco Rossi',
+        role: 'produttore', grower: 'Mori Marco', issuedAt: Date.now(), exp: Date.now() + 3600000,
+      }));
+      localStorage.setItem('vignero.demo.dismissed', '1');
+      localStorage.setItem('vignero.backend', 'demo');
+    } catch {}
+  });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+
+  await page.goto(BASE + '#/home', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(350);
+  const home = await page.evaluate(() => ({
+    txt: document.getElementById('main').textContent,
+    shipTile: document.querySelectorAll('.apptile[href="#/r/daspedire"]').length,
+    messoTile: document.querySelectorAll('.apptile[href="#/r/messodisposizione"]').length,
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+  }));
+  ok(!/Da spedire/.test(home.txt), 'producer phone home: no «Da spedire»');
+  ok(home.shipTile === 0 && home.messoTile === 1, 'producer phone home: the tiles are the new set');
+  ok(home.overflow <= 1, `producer phone home: no sideways scroll (${home.overflow}px)`);
+
+  await page.goto(BASE + '#/r/messodisposizione', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(400);
+  const rep = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.grid tbody tr')];
+    const first = rows[0];
+    return {
+      cards: rows.filter((r) => r.classList.contains('trow')).length,
+      firstIsSubtotal: first ? first.classList.contains('subtotal') : false,
+      firstText: first ? first.textContent.replace(/\s+/g, ' ').trim() : '',
+      display: first ? getComputedStyle(first).display : null,
+      totals: document.querySelectorAll('.grid tbody tr.total').length,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      grower: document.getElementById('main').textContent.includes('Mori Marco'),
+      toggle: !!document.querySelector('.view-toggle'),
+    };
+  });
+  ok(rep.cards > 0, `messo (phone): cards rendered (${rep.cards})`);
+  ok(rep.display === 'flex', `messo (phone): the subtotal is a card (${rep.display})`);
+  ok(rep.firstIsSubtotal && /Totale per portainnesto/.test(rep.firstText),
+     `messo (phone): subtotal card first («${rep.firstText.slice(0, 60)}»)`);
+  ok(rep.totals === 1, 'messo (phone): one grand total card');
+  ok(rep.grower, 'messo (phone): the producer is named');
+  ok(rep.toggle, 'messo (phone): cards/table switch available');
+  ok(rep.overflow <= 1, `messo (phone): no sideways scroll (${rep.overflow}px)`);
+  ok(errs.length === 0, `messo (phone): no page errors (${errs.join('; ')})`);
   await ctx.close();
 }
 

@@ -127,7 +127,10 @@ async function initSupabase(role) {
     const negative = role === 'produttore'
       ? await fetchAll(c, 'vista_disponibilita_negative', '*') : [];
     const lots = await fetchAll(c, 'vista_lotti_senza_produttore', '*');
-    store.remote = { rows, negative, lots };
+    // «Messo a disposizione»: the view already returns only the caller's records
+    const messo = role === 'produttore'
+      ? await fetchAll(c, 'vista_messo_a_disposizione', '*') : [];
+    store.remote = { rows, negative, lots, messo };
   }
   rebuild();
   store.ready = true;
@@ -232,6 +235,9 @@ function growerBuckets() {
   b[NON_RICONOSCIUTO] = 0;
   return b;
 }
+/** The three per-grower series the reports need (available, committed, shipped). */
+const growerSeries = () => ({ growerMag: growerBuckets(), growerOrd: growerBuckets(),
+                             growerSped: growerBuckets() });
 
 /** Aggregated metrics per dimension key. growerMag/growerOrd are per-grower sums. */
 export function metrics(filters) {
@@ -245,7 +251,7 @@ export function metrics(filters) {
         produzione: r.produzione || NON_INDICATA,
         varieta: r.varieta, clone: r.clone, portainnesto: r.portainnesto,
         mag: 0, ord: 0, sped: 0,
-        growerMag: growerBuckets(), growerOrd: growerBuckets(),
+        ...growerSeries(),
       };
       acc.set(k, e);
     }
@@ -270,6 +276,7 @@ export function metrics(filters) {
       ? (store.meta.produttori.includes(lot.produttore) ? lot.produttore : NON_RICONOSCIUTO)
       : NON_ATTRIBUITO;
     e.growerOrd[g] += o.quantita;
+    if (o.spedito) e.growerSped[g] += o.quantita;
   }
   for (const e of acc.values()) {
     e.daSpedire = e.ord - e.sped;
@@ -279,6 +286,33 @@ export function metrics(filters) {
 }
 
 const zero = () => ({ mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
+const METRIC_KEYS = ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita'];
+
+/** Rootstock → clone → variety is the order every availability report uses. */
+const byRootstock = (C) => (a, b) =>
+  C.compare(a.portainnesto, b.portainnesto) ||
+  C.compare(a.clone, b.clone) ||
+  C.compare(a.varieta, b.varieta);
+
+/** One subtotal per rootstock, keyed by the rootstock code. */
+function rootstockSubtotals(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    if (!out.has(r.portainnesto)) {
+      out.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0, ...zero() });
+    }
+    const t = out.get(r.portainnesto);
+    t.count += 1;
+    for (const k of METRIC_KEYS) t[k] += r[k];
+  }
+  return out;
+}
+
+function grandTotals(rows) {
+  const t = zero();
+  for (const r of rows) for (const k of METRIC_KEYS) t[k] += r[k];
+  return t;
+}
 
 /**
  * Report 1 — flat list of combinations, sorted by rootstock code then clone.
@@ -289,52 +323,35 @@ export function reportDisponibilita(filters) {
   // live backend: roles without table access get the aggregate view; staff (who can
   // read the tables) fall through to the shared engine below
   if (store.mode === 'supabase' && store.remote) return reportFromView(filters);
-  const m = metrics(filters);
   const C = collator();
-  const rows = [...m.values()].sort((a, b) =>
-    C.compare(a.portainnesto, b.portainnesto) ||
-    C.compare(a.clone, b.clone) ||
-    C.compare(a.varieta, b.varieta));
-
-  // one subtotal per rootstock, rendered as a highlighted row after its rows
-  const subtotals = new Map();
-  for (const r of rows) {
-    if (!subtotals.has(r.portainnesto)) {
-      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
-                                      mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
-    }
-    const t = subtotals.get(r.portainnesto);
-    t.count += 1;
-    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
-  }
-
-  const totals = rows.reduce((t, r) => {
-    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
-    return t;
-  }, zero());
-  const negativeCount = rows.filter((r) => r.disponibilita < 0).length;
-  return { rows, subtotals, totals, negativeCount, rowCount: rows.length };
+  const rows = [...metrics(filters).values()].sort(byRootstock(C));
+  return {
+    rows,
+    subtotals: rootstockSubtotals(rows),
+    totals: grandTotals(rows),
+    negativeCount: rows.filter((r) => r.disponibilita < 0).length,
+    rowCount: rows.length,
+  };
 }
 
 /**
- * Report 2 — availability split across the 8 growers, plus unattributed.
- * Flat list like Report 1: the rootstock is a filter, not a grouping level.
+ * Report 2 — availability split across the 8 growers.
  * `filters.produttore` keeps only the combinations that involve that grower
  * (a warehouse quantity or a commitment attributed to them).
  */
 export function reportPerProduttore(filters, growerList) {
   if (store.mode === 'supabase' && store.remote) {
-    return { rows: [], totals: { mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0,
+    return { rows: [], subtotals: new Map(), growers: store.meta.produttori,
+             totals: { mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0,
              per: {}, extra: 0, nonAttr: 0, totaleProduttori: 0 },
-             growers: store.meta.produttori, negativeCount: 0, rowCount: 0 };
+             negativeCount: 0, rowCount: 0 };
   }
   const f = filters || {};
-  const m = metrics(f);
   const C = collator();
   const growers = growerList || store.meta.produttori;
 
   const rows = [];
-  for (const e of m.values()) {
+  for (const e of metrics(f).values()) {
     if (f.produttore) {
       const mag = e.growerMag[f.produttore] || 0;
       const ord = e.growerOrd[f.produttore] || 0;
@@ -348,25 +365,35 @@ export function reportPerProduttore(filters, growerList) {
     rows.push({ ...e, per, extra, nonAttr, totaleProduttori });
   }
 
-  rows.sort((a, b) =>
-    C.compare(a.portainnesto, b.portainnesto) ||
-    C.compare(a.clone, b.clone) ||
-    C.compare(a.varieta, b.varieta));
+  rows.sort(byRootstock(C));
 
-  const totals = { mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0,
-                   per: {}, extra: 0, nonAttr: 0, totaleProduttori: 0 };
+  const totals = { ...zero(), per: {}, extra: 0, nonAttr: 0, totaleProduttori: 0 };
   for (const g of growers) totals.per[g] = 0;
+
+  // the same per-rootstock subtotals as Report 1, grower columns included
+  const subtotals = new Map();
   for (const r of rows) {
-    totals.mag += r.mag; totals.ord += r.ord; totals.sped += r.sped;
-    totals.daSpedire += r.daSpedire; totals.disponibilita += r.disponibilita;
+    if (!subtotals.has(r.portainnesto)) {
+      const per = {};
+      for (const g of growers) per[g] = 0;
+      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
+        ...zero(), per, extra: 0, nonAttr: 0, totaleProduttori: 0 });
+    }
+    const t = subtotals.get(r.portainnesto);
+    t.count += 1;
+    for (const k of METRIC_KEYS) t[k] += r[k];
+    t.extra += r.extra; t.nonAttr += r.nonAttr; t.totaleProduttori += r.totaleProduttori;
+    for (const g of growers) t.per[g] += r.per[g];
+
+    for (const k of METRIC_KEYS) totals[k] += r[k];
     totals.extra += r.extra; totals.nonAttr += r.nonAttr;
     totals.totaleProduttori += r.totaleProduttori;
-    for (const gr of growers) totals.per[gr] += r.per[gr];
+    for (const g of growers) totals.per[g] += r.per[g];
   }
 
   const negativeCount = rows.filter((r) =>
     r.disponibilita < 0 || r.nonAttr < 0 || growers.some((x) => r.per[x] < 0)).length;
-  return { rows, totals, growers, negativeCount, rowCount: rows.length };
+  return { rows, subtotals, totals, growers, negativeCount, rowCount: rows.length };
 }
 
 /* ---- supabase: report 1 from the aggregate view (roles without table access) ---- */
@@ -388,57 +415,112 @@ function reportFromView(filters) {
     .filter((r) => !f.produzione || r.produzione === f.produzione)
     .filter((r) => !f.varieta || r.varieta === f.varieta)
     .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
-    .sort((a, b) => C.compare(a.portainnesto, b.portainnesto) ||
-                    C.compare(a.clone, b.clone) || C.compare(a.varieta, b.varieta));
+    .sort(byRootstock(C));
 
-  const subtotals = new Map();
-  for (const r of rows) {
-    if (!subtotals.has(r.portainnesto)) {
-      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
-        mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
-    }
-    const t = subtotals.get(r.portainnesto);
-    t.count += 1;
-    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
-  }
-  const totals = rows.reduce((t, r) => {
-    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
-    return t;
-  }, zero());
-  return { rows, subtotals, totals, negativeCount: rows.filter((r) => r.disponibilita < 0).length,
-           rowCount: rows.length };
+  return {
+    rows,
+    subtotals: rootstockSubtotals(rows),
+    totals: grandTotals(rows),
+    negativeCount: rows.filter((r) => r.disponibilita < 0).length,
+    rowCount: rows.length,
+  };
 }
-/** Report 3 — shortages only, sorted varietà → portainnesto → clone. */
-export function reportIndisponibilita(filters) {
+
+/**
+ * Report 5 — what *one* producer put into the warehouse, with the commitments
+ * placed against those lots. Same columns and same per-rootstock subtotals as
+ * Report 1; `grower` comes from the session (live: filtered by the view itself).
+ */
+export function reportMessoADisposizione(filters, grower) {
+  const f = filters || {};
+  const C = collator();
+  let rows;
+
   if (store.mode === 'supabase' && store.remote) {
-    const f = filters || {};
-    const C = collator();
-    const rows = store.remote.negative
+    rows = (store.remote.messo || [])
+      .map((r) => ({
+        tipologia: r.tipologia || NON_INDICATA,
+        produzione: r.produzione || NON_INDICATA,
+        varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+        mag: Number(r.quantita_magazzino || 0),
+        ord: Number(r.quantita_ordinata || 0),
+        sped: Number(r.quantita_spedita || 0),
+        daSpedire: Number(r.quantita_ordinata || 0) - Number(r.quantita_spedita || 0),
+        disponibilita: Number(r.quantita_magazzino || 0) - Number(r.quantita_ordinata || 0),
+      }));
+  } else {
+    rows = [];
+    if (grower) {
+      for (const e of metrics(f).values()) {
+        const mag = e.growerMag[grower] || 0;
+        const ord = e.growerOrd[grower] || 0;
+        const sped = e.growerSped[grower] || 0;
+        if (!mag && !ord && !sped) continue;   // nothing made available here
+        rows.push({
+          tipologia: e.tipologia, produzione: e.produzione, varieta: e.varieta,
+          clone: e.clone, portainnesto: e.portainnesto,
+          mag, ord, sped, daSpedire: ord - sped, disponibilita: mag - ord,
+        });
+      }
+    }
+  }
+
+  rows = rows
+    .filter((r) => !f.tipologia || r.tipologia === f.tipologia)
+    .filter((r) => !f.produzione || r.produzione === f.produzione)
+    .filter((r) => !f.varieta || r.varieta === f.varieta)
+    .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
+    .sort(byRootstock(C));
+
+  return {
+    rows,
+    grower: grower || null,
+    subtotals: rootstockSubtotals(rows),
+    totals: grandTotals(rows),
+    negativeCount: rows.filter((r) => r.disponibilita < 0).length,
+    rowCount: rows.length,
+  };
+}
+
+/** Report 3 — shortages only, grouped by rootstock (like Report 1). */
+export function reportIndisponibilita(filters) {
+  const f = filters || {};
+  const C = collator();
+  let rows;
+
+  if (store.mode === 'supabase' && store.remote) {
+    rows = store.remote.negative
       .map((r) => ({
         tipologia: r.tipologia || NON_INDICATA, produzione: r.produzione || NON_INDICATA,
         varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
         mag: Number(r.quantita_magazzino || 0), ord: Number(r.quantita_impegnata || 0),
         disponibilita: Number(r.disponibilita_effettiva || 0),
         deficit: Math.abs(Number(r.disponibilita_effettiva || 0)),
-      }))
-      .filter((r) => !f.tipologia || r.tipologia === f.tipologia)
-      .filter((r) => !f.produzione || r.produzione === f.produzione)
-      .filter((r) => !f.varieta || r.varieta === f.varieta)
-      .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
-      .sort((a, b) => C.compare(a.varieta, b.varieta) ||
-                      C.compare(a.portainnesto, b.portainnesto) || C.compare(a.clone, b.clone));
-    return { rows, count: rows.length, deficitTot: rows.reduce((x, r) => x + r.deficit, 0) };
+      }));
+  } else {
+    rows = [...metrics(filters).values()]
+      .filter((e) => e.disponibilita < 0)
+      .map((e) => ({ ...e, deficit: e.ord - e.mag }));
   }
-  const m = metrics(filters);
-  const C = collator();
-  const rows = [...m.values()]
-    .filter((e) => e.disponibilita < 0)
-    .map((e) => ({ ...e, deficit: e.ord - e.mag }))
-    .sort((a, b) => C.compare(a.varieta, b.varieta) ||
-                    C.compare(a.portainnesto, b.portainnesto) ||
-                    C.compare(a.clone, b.clone));
+
+  rows = rows
+    .filter((r) => !f.tipologia || r.tipologia === f.tipologia)
+    .filter((r) => !f.produzione || r.produzione === f.produzione)
+    .filter((r) => !f.varieta || r.varieta === f.varieta)
+    .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
+    .sort(byRootstock(C));
+
+  const subtotals = new Map();
+  for (const r of rows) {
+    if (!subtotals.has(r.portainnesto)) {
+      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
+        mag: 0, ord: 0, deficit: 0 });
+    }
+    const t = subtotals.get(r.portainnesto);
+    t.count += 1; t.mag += r.mag; t.ord += r.ord; t.deficit += r.deficit;
+  }
   const deficitTot = rows.reduce((s2, r) => s2 + r.deficit, 0);
-  return { rows, count: rows.length, deficitTot };
+  return { rows, subtotals, count: rows.length, deficitTot };
 }
 
 /** Report 4 — commitments still to be shipped (spedito = false). */

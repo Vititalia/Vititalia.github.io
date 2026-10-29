@@ -8,6 +8,7 @@ Applied to the `Vignero` Supabase project (`aewavfybbvksxscpfxbt`).
 | 003 | `003_report_views_for_rls.sql` | Adds `riepilogo_per_produttore` and `vista_da_spedire` (staff-only): with RLS on, those two reports can no longer be computed in the browser. |
 | 002 | `002_harden_validation_trigger.sql` | Makes `valida_varieta_clone()` `security definer`: without it the trigger's master-data lookup is filtered by the caller's RLS, so non-staff got "il portainnesto non esiste" instead of the real permission error. |
 | 004 | `004_user_admin_rpc.sql` | Adds the three staff-only `SECURITY DEFINER` functions the *Utenti* screen needs — `create_user(p_email, p_nome, p_role, p_grower)` (returns a one-time temporary password), `reset_user_password(p_email)` and `delete_user(p_email)` — with the caller's role checked inside; `anon` and non-admins are refused (`Non autorizzato`). Accounts are created in `auth.users` with the token columns initialised to `''` (a NULL token column makes GoTrue answer `500 unexpected_failure`), and the `on_auth_user_created` trigger fills `profiles`. |
+| 005 | `005_vista_messo_a_disposizione.sql` | Adds `vista_messo_a_disposizione`: the «Messo a disposizione» report of a producer — their own lots with the commitments recorded on them (magazzino, ordinato, di cui spedito, disponibilità). The view filters by `auth_grower()` inside the definition, so it can never return another producer's rows; `anon` is revoked, `authenticated` keeps `select`. |
 
 ## Permission model (verified per role)
 
@@ -15,6 +16,7 @@ Applied to the `Vignero` Supabase project (`aewavfybbvksxscpfxbt`).
 |---|---|---|---|---|
 | `lotti_magazzino` / `ordini_impegni` / anagrafiche | read + write | read + write | — | — |
 | `riepilogo_disponibilita` | ✓ | ✓ | ✓ | ✓ |
+| `vista_messo_a_disposizione` (own rows only) | — | — | ✓ | — |
 | `vista_disponibilita_negative` | ✓ | ✓ | ✓ | — |
 | `vista_lotti_senza_produttore` (no producer column) | ✓ | ✓ | ✓ | ✓ |
 | `profiles` | all rows, assign roles | all rows, assign roles | own row | own row |

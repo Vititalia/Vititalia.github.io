@@ -98,6 +98,7 @@ export function viewLotti(root, ctx) {
     </div>
     <div class="spacer"></div>
     <div class="row">
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>
       <button class="btn btn-secondary btn-sm" type="button" id="importBtn">Importa CSV</button>
       ${S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Nuovo lotto</button>' : ''}
     </div></div>
@@ -145,6 +146,15 @@ export function viewLotti(root, ctx) {
   });
   const more = root.querySelector('#more');
   if (more) more.addEventListener('click', () => { state.lottiLimit += PAGE; ctx.refresh(); });
+  root.querySelector('#exportBtn').addEventListener('click', () => {
+    // the whole filtered list, not just the page on screen; the headers match the
+    // import schema (plus `id`) so the file can be re-imported as it is
+    U.exportCSV(`lotti_magazzino_${U.nowStamp()}.csv`,
+      ['id', 'anno', 'produttore', 'tipologia', 'produzione', 'varieta', 'clone',
+       'portainnesto', 'quantita', 'note'],
+      list.map((l) => [l.id, l.anno, l.produttore || '', l.tipologia || '', l.produzione || '',
+                       l.varieta, l.clone, l.portainnesto, l.quantita, l.note || '']));
+  });
   root.querySelector('#importBtn').addEventListener('click', () => ctx.navigate('#/dati/import'));
   const newLot = root.querySelector('#newBtn');
   if (newLot) newLot.addEventListener('click', () => openLottoForm(ctx));
@@ -239,6 +249,7 @@ export function viewOrdini(root, ctx) {
     </div>
     <div class="spacer"></div>
     <div class="row">
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>
       <button class="btn btn-secondary btn-sm" type="button" id="importBtn">Importa CSV</button>
       ${S.canWrite() ? '<button class="btn btn-primary" type="button" id="newBtn">+ Nuovo impegno</button>' : ''}
     </div></div>
@@ -249,10 +260,10 @@ export function viewOrdini(root, ctx) {
       nella colonna del produttore nel riepilogo per produttore.</span></div>
 
     <div class="report">${U.buildTable({
-      caption: 'Il flag Spedito è un booleano: alimenta «Di cui spedito» nei riepiloghi.',
+      caption: 'Il flag Spedito è un booleano: alimenta «Di cui spedito» nei riepiloghi. Le note sono quelle inserite con l\'impegno.',
       cols: [{ label: 'Lotto collegato' }, { label: 'Tipologia' }, { label: 'Produzione' }, { label: 'Varietà' },
              { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' },
-             { label: 'Spedito' }, { label: 'Azioni' }],
+             { label: 'Note' }, { label: 'Spedito' }, { label: 'Azioni' }],
       rows: list.length ? list.map((o) => {
         const lot = o.id_magazzino ? S.store.index.lotById.get(o.id_magazzino) : null;
         return {
@@ -265,6 +276,8 @@ export function viewOrdini(root, ctx) {
             { html: `<span class="ident">${U.esc(o.clone)}</span>`, label: 'Clone' },
             { html: `<span class="ident">${U.esc(o.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
             U.metric('Quantità', U.fmtQty(o.quantita)),
+            { html: o.note ? U.esc(o.note) : '<span style="color:var(--ink-300)">—</span>',
+              label: 'Note', cls: 'note-cell' },
             { html: `<button class="btn btn-sm ${o.spedito ? 'btn-primary' : 'btn-secondary'}" type="button" data-toggle="${U.esc(o.id)}" aria-pressed="${o.spedito}">${o.spedito ? '✓ Spedito' : 'Segna spedito'}</button>`, label: 'Spedito' },
             { html: actions(o.id), label: 'Azioni', cls: 'no-print' },
           ],
@@ -303,6 +316,15 @@ export function viewOrdini(root, ctx) {
         },
       });
     });
+  });
+  root.querySelector('#exportBtn').addEventListener('click', () => {
+    // same headers as the import schema (plus `id`), notes included
+    U.exportCSV(`ordini_impegni_${U.nowStamp()}.csv`,
+      ['id', 'tipologia', 'produzione', 'varieta', 'clone', 'portainnesto', 'quantita',
+       'spedito', 'note', 'id_magazzino'],
+      list.map((o) => [o.id, o.tipologia || '', o.produzione || '', o.varieta, o.clone,
+                       o.portainnesto, o.quantita, o.spedito ? 'Sì' : 'No',
+                       o.note || '', o.id_magazzino || '']));
   });
   const newOrd = root.querySelector('#newBtn');
   if (newOrd) newOrd.addEventListener('click', () => openOrdineForm(ctx));
