@@ -413,7 +413,9 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 
   /* context line: the dimensions that are already fixed by the mandatory filters */
   .grid tbody tr.trow td.ctx[data-label]{
-    flex:0 0 auto;display:inline;background:none;padding:0;
+    /* share the row on narrow phones and wrap the text inside the cell, so the two
+       dimensions stay side by side instead of stacking into two full lines */
+    flex:1 1 40%;min-width:0;display:block;background:none;padding:0;
     font-size:11px;line-height:15px;color:var(--ink-500);
   }
   .grid tbody tr.trow td.ctx[data-label]::before{
