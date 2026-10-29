@@ -28,5 +28,5 @@ The three user-admin functions in 004 are **admin-and-ufficio** callable for cre
 ## Still to do (needs dashboard/PAT or the secret key)
 
 1. Auth → Sign In / Providers → Email: **turn sign-ups off** — accounts are now created by an administrator from the *Utenti* screen (004).
-2. Auth → URL Configuration: Site URL `https://gabriele-scivoletto-1992.github.io/Vignero/` + same in redirect URLs.
+2. Auth → URL Configuration: Site URL `https://vititalia.github.io/` + same in redirect URLs.
 3. Configure a custom SMTP provider if the «Invia email» action is to be used: the built-in mailer allows only a couple of messages per hour.

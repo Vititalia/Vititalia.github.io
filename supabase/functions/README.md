@@ -41,7 +41,7 @@ reach the browser. This function is the missing server piece.
    | `MAIL_FROM` | `noreply@tuodominio.it` (must be a verified sender in Brevo) |
 
    Optional: `SITE_URL` — the link printed in the e-mail (defaults to the request's
-   origin, then to `https://gabriele-scivoletto-1992.github.io/Vignero/`).
+   origin, then to `https://vititalia.github.io/`).
 
 5. Reload the app and sign in as an administrator: **Utenti → + Nuovo utente**
    now shows the option *“Invia la password all'indirizzo indicato”* (checked by

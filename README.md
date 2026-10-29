@@ -7,7 +7,7 @@ reports the business runs on — **disponibilità**, **disponibilità per produt
 A single responsive web app: **grouped cards on a phone, real data grids on a PC**, with data entry
 deliberately restricted to PC.
 
-**Live app:** <https://gabriele-scivoletto-1992.github.io/Vignero/>
+**Live app:** <https://vititalia.github.io/>
 
 ---
 

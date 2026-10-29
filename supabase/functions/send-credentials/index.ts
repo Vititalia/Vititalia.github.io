@@ -42,7 +42,7 @@ function siteUrl(req: Request): string {
   if (configured) return configured.replace(/\/+$/, '') + '/';
   const origin = req.headers.get('origin');
   if (origin) return origin.replace(/\/+$/, '') + '/';
-  return 'https://gabriele-scivoletto-1992.github.io/Vignero/';
+  return 'https://vititalia.github.io/';
 }
 
 type Mail = { to: string; subject: string; text: string; html: string };
