@@ -43,7 +43,17 @@ reach the browser. This function is the missing server piece.
    Optional: `SITE_URL` — the link printed in the e-mail (defaults to the request's
    origin, then to `https://vititalia.github.io/`).
 
-5. Reload the app and sign in as an administrator: **Utenti → + Nuovo utente**
+5. **Turn the feature on in the app**: in `js/config.js` set
+
+   ```js
+   export const EMAIL_CREDENTIALS = true;
+   ```
+
+   and publish (`git push origin main`). Until that line is flipped the Utenti
+   screen keeps the local-password flow; it is a flag rather than an automatic
+   probe so that the app never issues a request to a function that does not
+   exist yet (the browser would log a CORS error on every visit).
+6. Reload the app and sign in as an administrator: **Utenti → + Nuovo utente**
    now shows the option *“Invia la password all'indirizzo indicato”* (checked by
    default). The password panel reports whether the e-mail went out.
 

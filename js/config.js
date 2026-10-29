@@ -18,3 +18,13 @@ export function backend() {
   return (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) ? 'supabase' : 'demo';
 }
 export const isSupabase = () => backend() === 'supabase';
+
+/**
+ * Set to `true` **after** deploying the `send-credentials` Edge Function (see
+ * supabase/functions/README.md): the Utenti screen then offers to e-mail the
+ * one-time password. Keeping it a flag avoids a probe request to a function that
+ * is not there yet — the browser would log a CORS error on every screen visit.
+ * With the flag on and the function missing, the screen says so in the panel and
+ * falls back to the local password.
+ */
+export const EMAIL_CREDENTIALS = false;

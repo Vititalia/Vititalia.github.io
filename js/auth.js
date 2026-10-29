@@ -7,7 +7,7 @@
  *     POST /users/invite …) with hashed passwords and signed tokens.
  */
 
-import { backend, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
+import { backend, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, EMAIL_CREDENTIALS } from './config.js';
 export { backend };
 
 export const SESSION_KEY = 'vignero.session.v1';
@@ -348,36 +348,12 @@ export async function setGrower(id, grower) {
 let credentialsFnMissing = false;
 const passwordLooksSafe = (pw) => typeof pw === 'string' && /^[\x21-\x7e]{6,64}$/.test(pw);
 
-export const credentialsEmailAvailable = () => backend() === 'supabase' && !credentialsFnMissing;
+export const credentialsEmailAvailable = () =>
+  backend() === 'supabase' && EMAIL_CREDENTIALS && !credentialsFnMissing;
 
-/**
- * One safe probe (the function answers `action: 'probe'` without touching an
- * account), so the Utenti screen only offers the e-mail option when the Edge
- * Function is actually deployed. Cached for the session.
- */
-let credentialsProbe = null;
+/** Whether the Utenti screen should offer e-mail delivery (see EMAIL_CREDENTIALS). */
 export async function ensureCredentialsEmail() {
-  if (backend() !== 'supabase' || credentialsFnMissing) {
-    credentialsFnMissing = true;
-    return false;
-  }
-  if (!credentialsProbe) {
-    credentialsProbe = (async () => {
-      try {
-        const c = await sb();
-        const { error } = await c.functions.invoke('send-credentials', { body: { action: 'probe' } });
-        if (error) {
-          const status = (error.context && error.context.status) || error.status || 0;
-          if (status === 404 || status === 0) { credentialsFnMissing = true; return false; }
-        }
-        return true;
-      } catch {
-        credentialsFnMissing = true;
-        return false;
-      }
-    })();
-  }
-  return credentialsProbe;
+  return credentialsEmailAvailable();
 }
 
 async function functionErrorMessage(error) {
