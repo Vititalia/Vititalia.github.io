@@ -202,11 +202,16 @@ export function buildTable({ cols, rows, caption, scroll = false, capId, tableCl
     if (r.type === 'empty') {
       return `<tr class="empty-row"><td colspan="${cols.length}">${r.cells[0].html}</td></tr>`;
     }
-    const cls = r.type === 'row' ? (r.cls || 'trow') : r.type;
-    return `<tr class="${cls}">${r.cells.map((c) => {
+    const rowCls = r.type === 'row' ? (r.cls || 'trow') : r.type;
+    return `<tr class="${rowCls}">${r.cells.map((c, i) => {
       const span = c.span ? ` colspan="${c.span}"` : '';
       const label = c.label ? ` data-label="${esc(c.label)}"` : '';
-      return `<td class="${c.cls || ''}"${span}${label}>${c.html}</td>`;
+      // the cell inherits the column alignment, so a numeric column can never
+      // drift away from its header (cells are built by several helpers)
+      const col = cols[i];
+      const cellCls = [c.cls || '', col && col.align === 'r' && !/\br\b/.test(c.cls || '') ? 'r' : '']
+        .filter(Boolean).join(' ');
+      return `<td class="${cellCls}"${span}${label}>${c.html}</td>`;
     }).join('')}</tr>`;
   }).join('');
   // The caption is a block *before* the table, never a <caption> element: inside a

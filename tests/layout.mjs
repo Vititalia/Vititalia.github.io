@@ -62,7 +62,7 @@ for (const route of ROUTES) {
       theadVisible: ths[0] ? style(t.querySelector('thead')).display !== 'none' : null,
       cols: ths.length,
       cells: tds.length,
-      numericRight: tds.filter((x) => x.classList.contains('r')).map((x) => style(x).textAlign),
+
       groupRows: t.querySelectorAll('tbody tr.group').length,
       subtotalRows: t.querySelectorAll('tbody tr.subtotal').length,
       negativeRows: t.querySelectorAll('tbody tr.negative').length,
@@ -86,8 +86,6 @@ for (const route of ROUTES) {
   ok(d.theadVisible === true, `${route}: header row visible on PC`);
   ok(d.thSticky === 'sticky', `${route}: header sticks while scrolling (got ${d.thSticky})`);
   ok(d.cells === d.cols, `${route}: every row has one cell per column (${d.cells}/${d.cols})`);
-  ok(d.numericRight.every((a) => a === 'right'),
-     `${route}: numeric columns right-aligned (got ${[...new Set(d.numericRight)]})`);
   ok(d.docScroll <= d.win + 1, `${route}: page has no horizontal scroll (${d.docScroll} > ${d.win})`);
   await ctx.close();
 }
@@ -111,6 +109,47 @@ for (const route of ROUTES) {
      `matrix: no unattributed/total-producers columns (${m.headers})`);
   ok(m.scrollW > m.clientW, `matrix: scrolls horizontally inside its panel`);
   ok(m.doc <= m.win + 1, `matrix: page itself does not scroll (${m.doc} > ${m.win})`);
+  await ctx.close();
+}
+
+/* every table: each header must line up with its column's data */
+for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita', '#/r/daspedire',
+                     '#/dati/lotti', '#/dati/ordini', '#/anagrafiche/viti', '#/anagrafiche/portainnesti']) {
+  const { page, ctx } = await open({ width: 1440, height: 900 }, route);
+  const a = await page.evaluate(() => {
+    const table = document.querySelector('.grid');
+    if (!table) return { none: true };
+    const ths = [...table.querySelectorAll('thead th')];
+    const rows = [...table.querySelectorAll('tbody tr')];
+    const rect = (el) => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      return r.getBoundingClientRect();
+    };
+    const bad = [];
+    let rightAligned = 0;
+    ths.forEach((th, i) => {
+      const right = getComputedStyle(th).textAlign === 'right';
+      if (right) rightAligned += 1;
+      const hr = rect(th);
+      let worst = 0, sample = null;
+      for (const row of rows) {
+        const td = row.children[i];
+        if (!td || !td.firstChild) continue;
+        const tr = rect(td);
+        const d = Math.abs((right ? tr.right : tr.left) - (right ? hr.right : hr.left));
+        if (d > worst) { worst = d; sample = td.textContent.trim().slice(0, 18); }
+      }
+      if (worst > 1.5) bad.push({ col: th.textContent.trim(), align: right ? 'right' : 'left', worst: +worst.toFixed(1), sample });
+    });
+    return { cols: ths.length, rightAligned, bad };
+  });
+  ok(!a.none, `${route}: table present for the alignment check`);
+  if (a.none) { await ctx.close(); continue; }
+  ok(a.bad.length === 0, `${route}: every header lines up with its data (${JSON.stringify(a.bad.slice(0, 3))})`);
+  /* numeric reports must actually have right-aligned columns, so this test cannot pass vacuously */
+  const numeric = /disponibilita|produttore|indisponibilita|daspedire|lotti|ordini|viti|portainnesti/.test(route);
+  ok(!numeric || a.rightAligned >= 1, `${route}: numeric columns are right-aligned (${a.rightAligned})`);
   await ctx.close();
 }
 
