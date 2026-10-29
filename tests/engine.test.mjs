@@ -4,7 +4,10 @@
 import fs from 'node:fs';
 import {
   loadFromSnapshot, reportDisponibilita, reportIndisponibilita, reportPerProduttore,
-  validateLotto, validateOrdine, clonesOf, summary, store,
+  reportDaSpedire, validateLotto, validateOrdine, clonesOf, summary, store,
+  addLotto, updateLotto, deleteLotto, addOrdine, updateOrdine, deleteOrdine,
+  addVitiPair, updateVitiPair, deleteVitiPair, addPortainnesto, renamePortainnesto,
+  deletePortainnesto, usageOfPair, usageOfRootstock,
 } from '../js/store.js';
 
 const snap = JSON.parse(fs.readFileSync(new URL('../data/snapshot.json', import.meta.url), 'utf8'));
@@ -50,6 +53,41 @@ ok(r1.rows.every((r, i) => i === 0 ||
    (r1.rows[i - 1].portainnesto === r.portainnesto &&
     C.compare(r1.rows[i - 1].clone, r.clone) <= 0)),
    'rows sorted by rootstock code, then clone');
+
+/* ---------- report 1: per-rootstock subtotals ---------- */
+{
+  const roots = new Set(r1.rows.map((r) => r.portainnesto));
+  near(r1.subtotals.size, roots.size, 'one subtotal per rootstock');
+  let sumSubs = 0;
+  for (const [root, t] of r1.subtotals) {
+    const rowsOfRoot = r1.rows.filter((r) => r.portainnesto === root);
+    near(t.count, rowsOfRoot.length, `subtotal count for ${root}`);
+    near(t.mag, rowsOfRoot.reduce((a, b) => a + b.mag, 0), `subtotal magazzino ${root}`);
+    near(t.ord, rowsOfRoot.reduce((a, b) => a + b.ord, 0), `subtotal ordinato ${root}`);
+    near(t.sped, rowsOfRoot.reduce((a, b) => a + b.sped, 0), `subtotal spedito ${root}`);
+    near(t.disponibilita, rowsOfRoot.reduce((a, b) => a + b.disponibilita, 0), `subtotal disponibilità ${root}`);
+    ok(t.portainnesto === root, 'subtotal carries its rootstock code: ' + root);
+    sumSubs += t.disponibilita;
+  }
+  near(sumSubs, r1.totals.disponibilita, 'the subtotals add up to the grand total');
+}
+
+/* ---------- report 4: da spedire ---------- */
+{
+  const rd = reportDaSpedire({
+    tipologia: store.meta.tipologiaDefault || 'Barbatelle innestate',
+    produzione: store.meta.produzioneDefault || 'Nuova produzione',
+  });
+  ok(rd.rows.length > 0, 'da spedire returns the open commitments');
+  ok(rd.rows.every((r) => store.ordini.find((o) => o.id === r.id)?.spedito === false),
+     'only commitments not yet shipped');
+  near(rd.totals.quantita, rd.rows.reduce((a, r) => a + r.quantita, 0), 'da spedire total = sum of rows');
+  near(rd.rowCount, rd.rows.length, 'da spedire rowCount');
+  ok(rd.rows.every((r) => r.tipologia === 'Barbatelle innestate' && r.produzione === 'Nuova produzione'),
+     'da spedire honours the filters');
+  const all = reportDaSpedire({});
+  ok(all.rows.length >= rd.rows.length, 'unfiltered da spedire is at least as large');
+}
 
 /* ---------- report 2 ---------- */
 const r2 = reportPerProduttore({});
@@ -119,6 +157,9 @@ function sumOf(list, k) { return list.reduce((s, r) => s + r[k], 0); }
 const anyVariety = store.index.varieta.find((v) => clonesOf(v).length > 0);
 const anyClone = clonesOf(anyVariety)[0];
 const otherVariety = store.index.varieta.find((v) => v !== anyVariety && !clonesOf(v).includes(anyClone));
+const baseLot = { anno: '2026', produttore: store.meta.produttori[0], tipologia: store.meta.tipologie[0],
+               produzione: store.meta.produzioni[0], varieta: anyVariety, clone: anyClone,
+               portainnesto: store.index.rootstocks[0], quantita: '100' };
 const base = { anno: '2026', produttore: store.meta.produttori[0], tipologia: store.meta.tipologie[0],
                produzione: store.meta.produzioni[0], varieta: anyVariety, clone: anyClone,
                portainnesto: store.index.rootstocks[0], quantita: '100' };
@@ -131,6 +172,32 @@ if (otherVariety) {
   ok(!!validateLotto({ ...base, varieta: otherVariety }).clone, 'clone/variety mismatch rejected');
 }
 ok(!!validateOrdine({ ...base, quantita: '0' }).quantita, 'order quantity 0 rejected');
+
+/* ---------- CRUD round trip ---------- */
+{
+  const base = { ...baseLot };
+  const lot = addLotto({ ...base, quantita: '111' });
+  ok(store.lotti.some((l) => l.id === lot.id), 'addLotto appends');
+  updateLotto(lot.id, { ...base, quantita: '222' });
+  near(store.lotti.find((l) => l.id === lot.id).quantita, 222, 'updateLotto modifies');
+  ok(deleteLotto(lot.id).ok, 'deleteLotto removes an unreferenced lot');
+  ok(!store.lotti.some((l) => l.id === lot.id), 'the lot is gone');
+
+  const pair = { varieta: 'ZZ TEST', clone: 'CL ONE' };
+  ok(addVitiPair(pair.varieta, pair.clone).ok, 'addVitiPair inserts');
+  ok(!addVitiPair(pair.varieta, pair.clone).ok, 'duplicate pair refused');
+  ok(updateVitiPair(pair, { varieta: 'ZZ TEST', clone: 'CL TWO' }).ok, 'updateVitiPair renames');
+  ok(store.viti.some((v) => v.varieta === 'ZZ TEST' && v.clone === 'CL TWO'), 'renamed pair present');
+  ok(deleteVitiPair('ZZ TEST', 'CL TWO').ok, 'deleteVitiPair removes it');
+  const usedPair = store.viti.find((v) => usageOfPair(v.varieta, v.clone) > 0);
+  ok(!deleteVitiPair(usedPair.varieta, usedPair.clone).ok, 'a pair in use is protected');
+
+  ok(addPortainnesto('ROOT TEST').ok, 'addPortainnesto inserts');
+  ok(renamePortainnesto('ROOT TEST', 'ROOT TEST 2').ok, 'renamePortainnesto renames');
+  ok(deletePortainnesto('ROOT TEST 2').ok, 'deletePortainnesto removes it');
+  const usedRoot = store.portainnesti.find((c) => usageOfRootstock(c) > 0);
+  ok(!deletePortainnesto(usedRoot).ok, 'a rootstock in use is protected');
+}
 
 /* ---------- summary ---------- */
 const s = summary();

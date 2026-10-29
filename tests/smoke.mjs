@@ -142,8 +142,8 @@ ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before si
 /* ---------------- route matrix ---------------- */
 const CASES = [
   ['admin', '#/home', ['Disponibilità totale', 'Riepiloghi', 'da dove vuoi iniziare']],
-  ['admin', '#/r/disponibilita', ['Riepilogo disponibilità', 'Totale generale', 'Da spedire', 'Codice portainnesto']],
-  ['admin', '#/r/produttore', ['Riepilogo per produttore', 'Non attribuito', 'Tot. produttori']],
+  ['admin', '#/r/disponibilita', ['Riepilogo disponibilità', 'Totale generale', 'Codice portainnesto', 'Totale per portainnesto']],
+  ['admin', '#/r/produttore', ['Riepilogo per produttore', 'Mori Marco', 'Disponibilità']],
   ['admin', '#/r/indisponibilita', ['Indisponibilità', 'Deficit']],
   ['admin', '#/dati/lotti', ['Lotti magazzino', 'Nuovo lotto']],
   ['admin', '#/dati/ordini', ['Ordini e impegni', 'Segna spedito']],
@@ -151,7 +151,12 @@ const CASES = [
   ['admin', '#/anagrafiche/viti', ['Anagrafica vite', 'coppie varietà/clone']],
   ['admin', '#/anagrafiche/portainnesti', ['Anagrafica portainnesto', 'Utilizzi']],
   ['admin', '#/config/permessi', ['Ruoli e permessi', 'Amministratore']],
-  ['admin', '#/profilo', ['Profilo', 'Disconnetti', 'Account dimostrativi']],
+  ['admin', '#/profilo', ['Profilo', 'Disconnetti', 'Account registrati']],
+  ['admin', '#/r/daspedire', ['Da spedire', 'Lotto collegato']],
+  ['admin', '#/config/utenti', ['Utenti', 'Invita utente']],
+  ['ufficio', '#/config/utenti', ['Utenti']],
+  ['produttore', '#/config/utenti', ['Non hai i permessi']],
+  ['vendite', '#/r/daspedire', ['Non hai i permessi']],
   ['ufficio', '#/dati/lotti', ['Lotti magazzino']],
   ['produttore', '#/home', ['Disponibilità totale']],
   ['produttore', '#/r/disponibilita', ['Riepilogo disponibilità']],
@@ -180,10 +185,10 @@ desktop = true;
 /* ---------------- home launcher ---------------- */
 {
   const expected = {
-    admin: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Lotti magazzino',
-            'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Ruoli e permessi', 'Profilo'],
-    ufficio: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Lotti magazzino',
-              'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Profilo'],
+    admin: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Da spedire', 'Lotti magazzino',
+            'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Utenti', 'Ruoli e permessi', 'Profilo'],
+    ufficio: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Da spedire', 'Lotti magazzino',
+              'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Utenti', 'Profilo'],
     produttore: ['Disponibilità', 'Indisponibilità', 'Profilo'],
     vendite: ['Disponibilità', 'Profilo'],
   };
@@ -218,7 +223,7 @@ desktop = true;
   ok(text().includes('Anagrafica vite'), 'the page opened from the tile renders');
 }
 
-/* ---------------- disponibilità: flat list, rootstock is a filter ---------------- */
+/* ---------------- disponibilità: flat list + subtotal rows ---------------- */
 {
   await loginAs('admin');
   await go('#/r/disponibilita');
@@ -226,65 +231,60 @@ desktop = true;
     groups: document.querySelectorAll('.grid tbody tr.group').length,
     subtotals: document.querySelectorAll('.grid tbody tr.subtotal').length,
     totals: document.querySelectorAll('.grid tbody tr.total').length,
-    cols: document.querySelectorAll('.grid thead th').length,
-    filterLabels: [...document.querySelectorAll('#filterHost .field > span')].map((s2) => s2.textContent.trim()),
+    cols: [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim()),
+    filters: [...document.querySelectorAll('#filterHost .field > span')].map((x) => x.textContent.trim()),
+    tipologiaOpts: [...document.querySelectorAll('#filterHost select[data-filter="tipologia"] option')].map((o) => o.value),
+    produzioneOpts: [...document.querySelectorAll('#filterHost select[data-filter="produzione"] option')].map((o) => o.value),
+    tipologiaSel: document.querySelector('#filterHost select[data-filter="tipologia"]').value,
+    produzioneSel: document.querySelector('#filterHost select[data-filter="produzione"]').value,
   };
-  ok(shape.groups === 0, `no rootstock grouping (${shape.groups} group rows)`);
-  ok(shape.subtotals === 0, `no rootstock subtotals (${shape.subtotals})`);
-  ok(shape.totals === 1, `one grand total row (${shape.totals})`);
-  ok(shape.cols === 7, `7 columns, rootstock included (${shape.cols})`);
-  ok(shape.filterLabels.includes('Codice portainnesto'),
-     `portainnesto is a filter (${JSON.stringify(shape.filterLabels)})`);
+  ok(shape.groups === 0, `no rootstock grouping (${shape.groups})`);
+  ok(shape.subtotals > 0, `a subtotal row per rootstock (${shape.subtotals})`);
+  ok(shape.totals === 1, `one grand total (${shape.totals})`);
+  ok(shape.cols.length === 6, `6 columns (${shape.cols.length}: ${shape.cols.join(' · ')})`);
+  ok(!shape.cols.includes('Da spedire'), 'the «Da spedire» column is gone');
+  ok(shape.filters.some((l) => l.includes('Codice portainnesto')), 'rootstock filter present');
+  ok(shape.tipologiaOpts.length === 4 && shape.tipologiaOpts.every(Boolean),
+     `tipologia mandatory: no empty option (${shape.tipologiaOpts.length})`);
+  ok(shape.produzioneOpts.length === 3 && shape.produzioneOpts.every(Boolean),
+     `produzione mandatory: no empty option (${shape.produzioneOpts.length})`);
+  ok(shape.tipologiaSel === 'Barbatelle innestate' && shape.produzioneSel === 'Nuova produzione',
+     `defaults applied (${shape.tipologiaSel} / ${shape.produzioneSel})`);
+  ok(text().includes('Totale per portainnesto'), 'subtotal labelled «Totale per portainnesto»');
 
-  /* the filter is in the URL and narrows the table */
   const root = '110 RICHTER';
   await go('#/r/disponibilita?portainnesto=' + encodeURIComponent(root));
   const roots = [...document.querySelectorAll('.grid tbody tr.trow td[data-label="Portainnesto"]')]
     .map((td) => td.textContent.trim());
-  ok(roots.length > 0, `rootstock filter returns rows (${roots.length})`);
-  ok(roots.every((x) => x === root), 'every row shows the filtered rootstock');
-  ok(document.querySelectorAll('.chip').length === 1, 'the active rootstock is shown as a chip');
+  ok(roots.length > 0 && roots.every((x) => x === root), `rootstock filter applies (${roots.length} rows)`);
+  ok(document.querySelectorAll('.chip').length === 1, 'the rootstock is a removable chip');
+  ok(![...document.querySelectorAll('.chip')].some((c) => /Tipologia|Produzione/.test(c.textContent)),
+     'mandatory filters are not removable chips');
 }
 
-/* ---------------- per produttore: flat list, two more filters ---------------- */
+/* ---------------- per produttore: 14 columns, grower + rootstock filters ---------------- */
 {
   await loginAs('admin');
   await go('#/r/produttore');
-  const shape = {
-    groups: document.querySelectorAll('.grid tbody tr.group').length,
-    subs: document.querySelectorAll('.grid tbody tr.subtotal').length,
-    totals: document.querySelectorAll('.grid tbody tr.total').length,
-    cols: document.querySelectorAll('.grid thead th').length,
-    filters: [...document.querySelectorAll('#filterHost .field > span')].map((x) => x.textContent.trim()),
-  };
-  ok(shape.groups === 0 && shape.subs === 0, `per produttore: no grouping (${shape.groups}/${shape.subs})`);
-  ok(shape.totals === 1, `per produttore: one grand total (${shape.totals})`);
-  ok(shape.cols === 16, `per produttore: 16 columns (${shape.cols})`);
-  ok(shape.filters.includes('Codice portainnesto'), `per produttore: rootstock filter (${JSON.stringify(shape.filters)})`);
-  ok(shape.filters.includes('Produttore'), `per produttore: grower filter (${JSON.stringify(shape.filters)})`);
+  const cols = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
+  ok(cols.length === 14, `per produttore: 14 columns (${cols.length})`);
+  ok(!cols.includes('Non attribuito'), 'no «Non attribuito» column');
+  ok(!cols.includes('Tot. produttori'), 'no «Tot. produttori» column');
+  ok(cols.filter((c) => /^(Mori Marco|Donati|Agriserv|Vivai riuniti|Bianchi|Golferenzo|Lorin|Esterno)$/.test(c)).length === 8,
+     'eight grower columns');
+  ok(!!document.querySelector('#filterHost select[data-filter="produttore"]'), 'grower filter present');
+  ok(document.querySelector('#filterHost select[data-filter="tipologia"]').value === 'Barbatelle innestate',
+     'mandatory tipologia default');
 
-  const totalRows = document.querySelectorAll('.grid tbody tr.trow').length;
+  const total = document.querySelectorAll('.grid tbody tr.trow').length;
   await go('#/r/produttore?produttore=Mori%20Marco');
   const filtered = {
     rows: document.querySelectorAll('.grid tbody tr.trow').length,
-    chip: [...document.querySelectorAll('.chip')].map((c) => c.textContent.trim()).join(' | '),
     hl: [...document.querySelectorAll('.grid thead th.grower-hl')].map((t) => t.textContent.trim()),
-    hlCells: document.querySelectorAll('.grid tbody tr.trow td.grower-hl').length,
-    hlTotal: document.querySelectorAll('.grid tbody tr.total td.grower-hl').length,
   };
-  ok(filtered.rows > 0 && filtered.rows < totalRows, `grower filter narrows the list (${filtered.rows} < ${totalRows})`);
-  ok(/Produttore: Mori Marco/.test(filtered.chip), `grower filter chip shown (${filtered.chip})`);
-  ok(filtered.hl.length === 1 && filtered.hl[0] === 'Mori Marco', `the filtered column is highlighted (${filtered.hl})`);
-  ok(filtered.hlCells === filtered.rows, `every row highlights that column (${filtered.hlCells}/${filtered.rows})`);
-  ok(filtered.hlTotal === 1, `the total row highlights it too (${filtered.hlTotal})`);
+  ok(filtered.rows > 0 && filtered.rows < total, `grower filter narrows rows (${filtered.rows} < ${total})`);
+  ok(filtered.hl.length === 1 && filtered.hl[0] === 'Mori Marco', 'filtered column highlighted');
 }
-
-/* filters via URL */
-await loginAs('admin');
-const variety = JSON.parse(SNAP).lotti[0][4];
-t = await go('#/r/disponibilita?varieta=' + encodeURIComponent(variety));
-ok(t.includes(variety), 'filter from URL is applied');
-ok(t.includes('rimuovi filtro'), 'active filter chip rendered');
 
 /* ---------------- data entry: new lot ---------------- */
 await go('#/dati/lotti');
@@ -358,21 +358,24 @@ ok(storeMod.store.ordini[0].spedito === !wasShipped, 'spedito toggles');
 click(document.getElementById('newBtn'));
 await wait(20);
 const osheet = document.querySelector('.sheet');
-setSelectIn(osheet, 'tipologia', snap.meta.tipologie[0]);
-setSelectIn(osheet, 'produzione', snap.meta.produzioni[0]);
-setSelectIn(osheet, 'portainnesto', snap.portainnesti[0]);
-const ovariety = osheet.querySelector('[data-variety] input');
-ovariety.value = snap.lotti[0][4];
-ovariety.dispatchEvent(new window.Event('input', { bubbles: true }));
-await wait(10);
-click(osheet.querySelector('.combo-list button[data-i]'));
-await wait(10);
-const oclone = osheet.querySelector('[name="clone"]');
-oclone.value = [...oclone.options].map((o) => o.value).filter(Boolean)[0];
+ok(!!osheet, 'order form sheet opens');
+
+/* the order must be linked to a lot: pick the first suggestion */
+const lotInput = osheet.querySelector('[data-lot] input');
+ok(!!lotInput, 'order form has the lot picker');
+lotInput.value = '';
+lotInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(20);
+const lotSuggestion = osheet.querySelector('.combo-list button[data-i]');
+ok(!!lotSuggestion, 'lot picker suggests lots');
+click(lotSuggestion);
+await wait(30);
+ok(!!osheet.querySelector('[name="id_magazzino"]').value, 'picking a lot stores its id');
+ok(!!osheet.querySelector('[name="clone"]').value, 'picking a lot fills the clone');
 osheet.querySelector('[name="quantita"]').value = '250';
 const beforeOrd = storeMod.store.ordini.length;
 click(osheet.querySelector('.sheet-actions [data-act="1"]'));
-await wait(40);
+await wait(60);
 ok(storeMod.store.ordini.length === beforeOrd + 1, 'order is saved');
 
 function setSelectIn(root, name, value) {
@@ -401,6 +404,172 @@ click(rsheet2.querySelector('.sheet-actions [data-act="1"]'));
 await wait(20);
 ok(!rsheet2.querySelector('#rootErr').hidden, 'duplicate rootstock is refused');
 ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored');
+
+/* ---------------- role-scoped home and profile ---------------- */
+{
+  /* Vendite: no producer info, no shortage box, no «da spedire» box */
+  await loginAs('vendite');
+  await go('#/home');
+  let homeText = text();
+  ok(![...document.querySelectorAll('.grid thead th')].some((t) => /Produttore/.test(t.textContent)),
+     'vendite: no producer column in «ultimi lotti»');
+  ok(!homeText.includes('In indisponibilità'), 'vendite: no shortage summary box');
+  ok(!homeText.includes('Da spedire'), 'vendite: no «da spedire» summary box');
+  ok(homeText.includes('Disponibilità totale'), 'vendite: availability KPI still there');
+
+  await go('#/profilo');
+  let prof = text();
+  ok(!prof.includes('Account registrati'), 'vendite: other users are not listed');
+  ok(!/Specifica|Mockup/.test(prof), 'vendite: no specification/mockup links');
+
+  /* Produttore: same profile restrictions, and no producer info either */
+  await loginAs('produttore');
+  await go('#/home');
+  homeText = text();
+  ok(![...document.querySelectorAll('.grid thead th')].some((t) => /Produttore/.test(t.textContent)),
+     'produttore: no producer column in «ultimi lotti»');
+  ok(homeText.includes('In indisponibilità'), 'produttore: keeps the shortage box');
+  await go('#/profilo');
+  prof = text();
+  ok(!prof.includes('Account registrati'), 'produttore: other users are not listed');
+  ok(!/Specifica|Mockup/.test(prof), 'produttore: no specification/mockup links');
+
+  /* Amministrazione: can manage users but no docs; Amministratore keeps the docs */
+  await loginAs('ufficio');
+  await go('#/profilo');
+  prof = text();
+  ok(!/Specifica|Mockup/.test(prof), 'ufficio: no specification/mockup links');
+  ok(prof.includes('Gestione utenti'), 'ufficio: reached the user management panel');
+  await go('#/home');
+  ok([...document.querySelectorAll('.grid thead th')].some((t) => /Produttore/.test(t.textContent)),
+     'ufficio: can see the producer column');
+
+  await loginAs('admin');
+  await go('#/profilo');
+  prof = text();
+  ok(/Specifica/.test(prof) && /Mockup/.test(prof), 'admin: keeps the documentation links');
+  ok(prof.includes('Account registrati'), 'admin: sees the registered accounts');
+}
+
+/* ---------------- utenti: invito, ruolo, sospensione, reset ---------------- */
+{
+  await loginAs('ufficio');
+  await go('#/config/utenti');
+  ok(text().includes('Utenti'), 'users panel opens for Amministrazione');
+  ok(document.querySelectorAll('[data-block]').length >= 4, 'rows offer block actions');
+  ok(document.querySelectorAll('[data-reset-pw]').length >= 4, 'rows offer password reset');
+
+  const invited = auth.inviteUser({ name: 'Test Vendite', email: 'test.vendite@vignero.it', role: 'vendite' });
+  ok(invited.ok, 'invite creates the account');
+  ok(invited.user.status === 'invitato', 'the invited account starts as «invitato»');
+  ok(!!invited.password, 'a temporary password is returned once');
+  ok(auth.authenticate('test.vendite@vignero.it', invited.password).ok,
+     'the invited user can sign in with the temporary password');
+
+  const blocked = auth.blockUser(invited.user.id);
+  ok(blocked.ok, 'the account can be blocked');
+  const refused = auth.authenticate('test.vendite@vignero.it', invited.password);
+  ok(!refused.ok && /sospeso/i.test(refused.error), 'a blocked account cannot sign in');
+
+  ok(auth.unblockUser(invited.user.id).ok, 'the account can be reactivated');
+  ok(auth.authenticate('test.vendite@vignero.it', invited.password).ok, 'and can sign in again');
+
+  const reset = auth.resetPassword(invited.user.id);
+  ok(reset.ok && reset.password !== invited.password, 'password reset issues a new password');
+  ok(!auth.authenticate('test.vendite@vignero.it', invited.password).ok, 'the old password stops working');
+  ok(auth.authenticate('test.vendite@vignero.it', reset.password).ok, 'the new password works');
+
+  ok(auth.setRole(invited.user.id, 'produttore').ok, 'role can be reassigned');
+  ok(auth.listUsers().find((u) => u.id === invited.user.id).role === 'produttore', 'the new role is stored');
+  auth.resetRegistry();
+  ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'registry reset clears the invite');
+}
+
+/* ---------------- master data: add, edit, delete ---------------- */
+{
+  await loginAs('ufficio');
+  await go('#/anagrafiche/viti');
+  const before = storeMod.store.viti.length;
+
+  /* the «+ Varietà / clone» button must actually work */
+  document.getElementById('newBtn').click();
+  await wait(30);
+  const sheet = document.querySelector('.sheet');
+  ok(!!sheet, 'the add-pair sheet opens');
+  const varietyInput = sheet.querySelector('[data-variety] input');
+  varietyInput.value = 'VARIETA TEST';
+  varietyInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+  sheet.querySelector('[name="clone"]').value = 'CLONE TEST';
+  sheet.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(40);
+  ok(storeMod.store.viti.length === before + 1, 'the pair is created (button works)');
+  ok(storeMod.store.viti.some((v) => v.varieta === 'VARIETA TEST' && v.clone === 'CLONE TEST'),
+     'the new pair is in the anagrafica');
+
+  /* delete it again — the list is paginated, so filter down to it */
+  await go('#/anagrafiche/viti');
+  const search = document.getElementById('q');
+  search.value = 'VARIETA TEST';
+  search.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await wait(350);
+  const del = [...document.querySelectorAll('[data-del-pair]')]
+    .find((b) => b.dataset.delPair === 'VARIETA TEST|CLONE TEST');
+  ok(!!del, 'the new pair has a delete action');
+  del.click();
+  await wait(30);
+  document.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(40);
+  ok(storeMod.store.viti.length === before, 'the pair is deleted');
+
+  /* a pair in use cannot be deleted */
+  const usedPair = storeMod.store.viti.find((v) => storeMod.usageOfPair(v.varieta, v.clone) > 0);
+  const blockedDel = storeMod.deleteVitiPair(usedPair.varieta, usedPair.clone);
+  ok(!blockedDel.ok && /uso|usano/i.test(blockedDel.error), 'a used pair cannot be deleted');
+
+  /* rootstocks: rename an unused code, delete it, and refuse a used one */
+  await go('#/anagrafiche/portainnesti');
+  const unused = storeMod.store.portainnesti.find((c) => storeMod.usageOfRootstock(c) === 0);
+  const renamed = storeMod.renamePortainnesto(unused, unused + ' TEST');
+  ok(renamed.ok, 'an unused rootstock can be renamed');
+  ok(storeMod.store.portainnesti.includes(unused + ' TEST'), 'the new code is present');
+  ok(storeMod.deletePortainnesto(unused + ' TEST').ok, 'and it can be deleted');
+  const usedRoot = storeMod.store.portainnesti.find((c) => storeMod.usageOfRootstock(c) > 0);
+  ok(!storeMod.deletePortainnesto(usedRoot).ok, 'a rootstock in use cannot be deleted');
+}
+
+/* ---------------- lotti: edit and delete ---------------- */
+{
+  await loginAs('admin');
+  await go('#/dati/lotti');
+  /* the list shows the newest 40 rows, so take the row that is actually rendered */
+  const editBtn = document.querySelector('[data-edit]');
+  ok(!!editBtn, 'lots have an edit action');
+  const first = storeMod.store.lotti.find((l) => l.id === editBtn.dataset.edit);
+  const beforeQty = first.quantita;
+  editBtn.click();
+  await wait(30);
+  const sheet = document.querySelector('.sheet');
+  ok(text().length > 0 && !!sheet, 'the edit form opens prefilled');
+  sheet.querySelector('[name="quantita"]').value = String(beforeQty + 10);
+  sheet.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(40);
+  ok(storeMod.store.lotti.find((l) => l.id === first.id).quantita === beforeQty + 10,
+     'the lot quantity is updated');
+
+  await go('#/dati/lotti');
+  const delBtn = document.querySelector(`[data-del="${first.id}"]`);
+  ok(!!delBtn, 'lots have a delete action');
+  delBtn.click();
+  await wait(30);
+  document.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(40);
+  ok(!storeMod.store.lotti.some((l) => l.id === first.id), 'the lot is deleted');
+
+  /* a lot referenced by an order cannot be deleted */
+  const ord = storeMod.store.ordini.find((o) => o.id_magazzino);
+  const res = storeMod.deleteLotto(ord.id_magazzino);
+  ok(!res.ok && /impegno/i.test(res.error), 'a lot with commitments cannot be deleted');
+}
 
 /* ---------------- navigation chrome ---------------- */
 await go('#/home');

@@ -15,10 +15,10 @@ deliberately restricted to PC.
 
 | Role | Can do | Devices |
 |---|---|---|
-| **Amministratore** | Everything: entry, imports, master data, roles matrix | PC + phone (read) |
-| **Amministrazione** | Data entry (form or CSV import), all three reports | PC + phone (read) |
-| **Produttore** | Read the availability and shortage reports | phone first |
-| **Vendite** | Read the availability report only — the most restricted module | phone first |
+| **Amministratore** | Everything: entry and editing, imports, master data, users, roles matrix, docs | PC + phone (read) |
+| **Amministrazione** | Entry/editing (lots, orders, master data), CSV import, **user management**, all reports | PC + phone (read) |
+| **Produttore** | Read the availability and shortage reports; **no producer names** | phone first |
+| **Vendite** | Read the availability report only; **no producer names, no shortage box, no «da spedire»** | phone first |
 
 ### Accounts
 
@@ -48,21 +48,25 @@ row has a **Usa** button that fills and submits the form) and under *Profilo*.
 |---|---|---|
 | `#/login` | Accedi | email + password, one account per profile, session of 8 h; **signing in always opens Home** |
 | `#/home` | Panoramica | launcher: one tile per page the role can open | 4 KPIs, recent lots, top shortages, report shortcuts |
-| `#/r/disponibilita` | Riepilogo disponibilità | **flat list** — rootstock is a column and a filter; single grand total; negative rows bold red |
-| `#/r/produttore` | Riepilogo per produttore | **flat list**, 16 columns (8 growers + *Non attribuito* + total); filters include **Portainnesto** and **Produttore** (highlights that column); clone and rootstock columns frozen |
+| `#/r/disponibilita` | Riepilogo disponibilità | flat list with a highlighted **Totale per portainnesto** row per rootstock, then the grand total; negative rows bold red |
+| `#/r/produttore` | Riepilogo per produttore | **flat list**, 14 columns (6 base + 8 growers); filters include **Portainnesto** and **Produttore** (highlights that column); clone and rootstock columns frozen |
 | `#/r/indisponibilita` | Indisponibilità | deficit only, sorted varietà → portainnesto → clone |
-| `#/dati/lotti` | Lotti magazzino | entry form with dependent variety → clone select |
-| `#/dati/ordini` | Ordini e impegni | inline *Spedito* toggle with undo, lot picker prefills dimensions |
+| `#/r/daspedire` | Da spedire | only the commitments with *Spedito* off; reachable from the «Da spedire» KPI, on phone and PC |
+| `#/dati/lotti` | Lotti magazzino | create, **edit and delete** lots; dependent variety → clone select |
+| `#/dati/ordini` | Ordini e impegni | create, **edit and delete**; inline *Spedito* toggle with undo; a lot is required |
 | `#/dati/import` | Import CSV | validate-then-write, per-row errors, exportable error report |
-| `#/anagrafiche/viti` | Anagrafica vite | one row per variety+clone pair, grouped by variety |
-| `#/anagrafiche/portainnesti` | Anagrafica portainnesto | code + usage count |
-| `#/config/permessi` | Ruoli e permessi | the matrix the app enforces |
+| `#/anagrafiche/viti` | Anagrafica vite | one row per variety+clone pair, grouped by variety; create, **edit and delete** |
+| `#/anagrafiche/portainnesti` | Anagrafica portainnesto | code + usage count; create, **edit and delete** |
+| `#/config/utenti` | Utenti | invite, change role, block/unblock, reset password (Admin + Amministrazione) |
+| `#/config/permessi` | Ruoli e permessi | the matrix the app enforces (Admin only) |
 | `#/profilo` | Profilo | session + logout, reset local edits, demo accounts |
 
-Filters are single-select and live **in the URL**, so a filtered report can be shared or refreshed:
-Tipologia, Produzione and searchable Codice varietà everywhere; **Codice portainnesto** on both report
-(the rootstock is a filter, not a grouping level); and **Produttore** on the per-grower report, which
-keeps only the combinations involving that grower and highlights their column.
+Filters are single-select and live **in the URL**, so a filtered report can be shared or refreshed.
+**Tipologia and Produzione are mandatory** on *Disponibilità*, *Per produttore* and *Da spedire* (the
+only allowed values are selectable, and they open on *Barbatelle innestate* / *Nuova produzione*),
+because those tables never show the two dimensions. On top of that: searchable **Codice varietà**
+everywhere, **Codice portainnesto** on the three quantity reports, and **Produttore** on the per-grower
+report, which keeps only the combinations involving that grower and highlights their column.
 
 ### Home as a launcher
 
@@ -77,6 +81,9 @@ phone (four from 640 px), and the recent-lots and shortage panels follow below i
 
 ### Responsive behaviour
 
+- **≤759 px** — reports offer a **Schede / Tabella** switch: the card list is the default, and
+  *Tabella* renders the very same table as the web (inside a horizontally scrolling panel, from a 6th
+  column onward). The choice is remembered.
 - **≤759 px** — every table becomes a list of cards, one per row: a title line (clone code in mono, the
   variety beneath), the rootstock as a chip, then labelled field boxes — two per line, values 14 px over
   10 px labels, the availability value full width and emphasised, and the grower values four per line
@@ -175,9 +182,12 @@ here cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
 
 ## Known limitations / next steps
 
-- Writes are local (`localStorage`), because Pages is static. A real deployment needs the API
-  behind `/dati/*`; the store layer is already the only place that would change.
-- The *Non attribuito* column exists because no order in the source data points at a lot; connecting
-  orders to lots (and grower attribution) is the highest-value next data change.
-- Master-data screens support create + duplicate detection; edit/deactivate needs the `attiva` column
-  that the current schema does not have.
+- Writes are local (`localStorage`), because Pages is static: lots, orders, master data and users are
+  created/edited/deleted in the browser. A real deployment needs the API behind those screens; the
+  store and `auth.js` layers are the only places that would change.
+- Every commitment is now placed against a lot (the order form requires it, and the demo snapshot
+  links each order to a lot with the same dimensions), so no quantity is left unattributed. The
+  per-grower report still warns if the data ever contains an order without a lot.
+- Master data can be created, renamed and deleted, but a pair/rootstock that is used by lots or
+  orders is protected (rename and delete are refused) — there is no `attiva` column to deactivate it
+  instead, which is the next schema change to ask for.

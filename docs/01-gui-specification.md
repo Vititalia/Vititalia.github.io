@@ -283,11 +283,11 @@ Null-dimension handling
 | Aspect | Specification |
 |---|---|
 | Source | `lotti_magazzino` ⟕ `ordini_impegni` on the grouping key |
-| Filters | `tipologia` (4 values), `produzione` (3 values), `codice_varieta` (searchable, from `anagrafica_vite`), **`codice_portainnesto` (searchable)**; each single-select; plus an optional **year** filter on `anno_conferimento` (§15 Q4) |
+| Filters | **`tipologia` and `produzione` are mandatory** and open on `Barbatelle innestate` / `Nuova produzione` (the table never shows those dimensions, so a value must always be chosen); `codice_varieta` (searchable) and **`codice_portainnesto` (searchable)** are optional |
 | Layout | **Flat list**: one row per combination. The rootstock is a filter and a column, **not** a grouping level — there are no group headers and no per-rootstock subtotals (decision PD-1, §15.3) |
-| Columns | Codice clone (+ variety) · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Da spedire · Disponibilità |
+| Columns | Codice clone (+ variety) · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità — **no «Da spedire» column** (PD-3) |
 | Sort | `codice_portainnesto` ASC, then `codice_clone` ASC |
-| Totals | one **"Totale generale"** row only |
+| Totals | a **subtotal row per rootstock**, labelled **"Totale per portainnesto"** with its rootstock code and the aggregated values, highlighted and bold; then one **"Totale generale"** row (PD-3) |
 | Alert | Disponibilità < 0 → whole row bold red + `!` icon + red left border |
 | Export | CSV/Excel/PDF of the filtered rows plus the grand total |
 
@@ -297,13 +297,25 @@ Null-dimension handling
 |---|---|
 | Split basis | Warehouse quantities split by `lotti_magazzino.produttore` (canonical 8 + **"Non attribuito"** + **"Non riconosciuto"**) |
 | Ordered quantities | An order is attributed to a grower **through `id_magazzino → lotti.produttore`**. Orders with `id_magazzino IS NULL` cannot be attributed and land in the **"Non attribuito"** column, never silently spread across growers |
-| Filters | As Report 1 (Tipologia, Produzione, Codice varietà, **Codice portainnesto**) **plus Produttore**. Choosing a grower keeps only the combinations that involve them (a warehouse quantity or a committed quantity) and highlights that column; their column total does not change, since filtered-out rows contributed zero |
+| Filters | As Report 1 — **Tipologia and Produzione mandatory**, Codice varietà and Codice portainnesto optional — **plus Produttore**. Choosing a grower keeps only the combinations that involve them and highlights that column; their column total does not change, since filtered-out rows contributed zero |
 | Layout | **Flat list**, one row per combination — no rootstock grouping and no per-rootstock subtotals (PD-2, §15.3) |
-| Columns | Codice clone · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità · 8 grower columns · **Non attribuito** · Totale produttori |
-| Columns total | 6 + 8 + 1 + 1 = **16** |
+| Columns | Codice clone · Codice portainnesto · Magazzino · Ordinato · Di cui spedito · Disponibilità · 8 grower columns — **no «Non attribuito», no «Totale produttori»** (PD-4: every commitment is placed against a lot, so every record has a producer) |
+| Columns total | 6 + 8 = **14** |
 | Sort | by rootstock, then clone (as Report 1) |
 | Totals | one **"Totale generale"** row summing every column |
 | Self-check | "Totale produttori" must equal the grower columns sum; a mismatch (possible only from unattributed orders) is shown as a reconciliation note with the amount |
+
+**Report 4 — Da spedire** (Admin, Amministrazione)
+
+| Aspect | Specification |
+|---|---|
+| Purpose | The commitments still to be shipped, reached from the «Da spedire» KPI on the home screen |
+| Row set | `ordini_impegni` with `spedito = FALSE`, after the filters |
+| Filters | **Tipologia and Produzione mandatory** (as Report 1); Codice varietà and Codice portainnesto optional |
+| Columns | Codice clone (+ variety) · Codice portainnesto · Lotto collegato (produttore · anno) · Quantità |
+| Sort | by rootstock, then clone |
+| Totals | one row with the count of commitments and the summed quantity |
+| Devices | **Also on a phone** — not PC-gated like the entry screens |
 
 **Report 3 — Indisponibilità** (Admin, Amministrazione, Produttore)
 
@@ -399,7 +411,8 @@ This is the central responsive decision of the product. **The same query result 
 Rules that apply at every breakpoint
 
 - R-1 The filter bar is **always visible above the table**, never behind a menu (requirement: "Filters at the top").
-- R-2 Active filters are shown as removable chips; a `Rimuovi filtri` reset is always present when any filter is active.
+- R-2 Active filters are shown as removable chips; a `Rimuovi filtri` reset is always present when any filter is active. **Mandatory filters (Tipologia, Produzione) are never chips** — they cannot be removed.
+- R-2b On a phone every report offers **Schede / Tabella**: cards by default, or the same table as the web inside a horizontally scrolling panel. The choice is remembered across screens.
 - R-3 No report groups by rootstock any more (PD-1, PD-2): both tables are flat lists with a single "Totale generale" row, and the rootstock is a filter.
 - R-4 The red-negative treatment is identical in all layouts: bold + red text + icon + left border.
 - R-5 Horizontal scrolling is forbidden on the page; only inside a data table (`md`+ per-grower report).
@@ -1297,7 +1310,8 @@ Below the grid, a **read-only permission matrix** rendered from §2.2 (screens �
 
 | Group | Rows |
 |---|---|
-| Account | Dati personali (read-only for non-admin), Cambia password |
+| Account | Dati personali (read-only for non-admin), Cambia password. **The registered-account list and the specification/mockup links are visible to Amministratore only** |
+| Gestione | *Gestione utenti* — shown to Admin and Amministrazione |
 | Preferenze | Unità di misura visualizzata (if configurable), Formato numerico (it-IT, fixed), Dimensione testo della tabella (`md`+) |
 | Sessione | Disconnetti (danger text) |
 | Informazioni | Versione, Ambiente, Note legali, *Installa l'app* (PWA prompt where available) |
@@ -1490,6 +1504,8 @@ Status after reconciling `docs/db-schema.sql`.
 
 | # | Decision | Rationale | Effect |
 |---|---|---|---|
+| **PD-3** | Report 1 keeps the flat list but **regains a subtotal row per rootstock** ("Totale per portainnesto", bold, tinted) and **drops the «Da spedire» column**; Tipologia and Produzione become **mandatory** filters with defaults | The office asked for the per-rootstock total back while keeping the filterable list; «Da spedire» duplicated a derived value and now has its own report; the two dimensions are not shown in the table, so they cannot be left ambiguous | Supersedes part of PD-1 |
+| **PD-4** | Report 2 **drops «Non attribuito» and «Totale produttori»**; every commitment is placed against a lot (the order form requires it) | Business rule: a record in stock always has a producer — a member or *Esterno* — so an unattributed bucket is a data error, not a column. The report warns if such data ever appears | Supersedes the PD-2 column set |
 | **PD-2** | **Report 2 follows PD-1**: flat list, no rootstock grouping or subtotals, and two new filters — **Codice portainnesto** and **Produttore** | One consistent, filterable table shape across both reports; the grower filter answers "show me this grower's rows" in one choice and highlights the column instead of hiding the context | Supersedes the grouped/modified requirement for the per-grower report. Requirement R11 (role restriction) is unchanged |
 | **PD-1** | **Report 1 is no longer grouped by rootstock**: the rootstock is a filter and a column, and the only aggregate is the grand total | One flat list reads better on a phone and lets the office isolate a single rootstock in one tap instead of scrolling to its group; the per-grower report keeps the grouped/subtotal layout | Supersedes requirement R9's grouping/subtotal rule for Report 1. R10 (red negative rows) still holds. Report 2 is unchanged |
 

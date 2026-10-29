@@ -29,11 +29,25 @@ for (anno, prod, tipo, prodn, var, clone, root, quant, note) in real["lotti"]:
     lotti.append([anno, prod, tipo, prodn, var, clone, root, q(quant, f),
                   note or None])
 
+# Every commitment is placed against a warehouse lot (business rule: an order
+# always has a producer — a member or "Esterno"). In the source data every order
+# has id_magazzino = NULL, so the demo snapshot links each order to the first lot
+# with the same dimensions; the store assigns ids 'lot-<n>' by array position.
+lot_index = {}
+for idx, lot in enumerate(lotti, start=1):
+    k = (lot[2], lot[3], lot[4], lot[5], lot[6])
+    lot_index.setdefault(k, idx)
+
 ordini = []
+linked = 0
 for i, (oid, idmag, tipo, prodn, var, clone, root, quant, spedito, note) in enumerate(real["ordini"]):
-    # orders are not grower-attributed in the source data; keep that shape
     f = factor(var, clone, root, str(i), "ordine")
-    ordini.append(["ord-%04d" % (i + 1), None, tipo, prodn, var, clone, root,
+    target = lot_index.get((tipo, prodn, var, clone, root))
+    if target:
+        linked += 1
+    ordini.append(["ord-%04d" % (i + 1),
+                   ("lot-%04d" % target) if target else None,
+                   tipo, prodn, var, clone, root,
                    q(quant, f), bool(spedito), note or None])
 
 def aggregate(lotti, ordini):
@@ -46,8 +60,12 @@ def aggregate(lotti, ordini):
         acc.setdefault(k, {"mag": 0, "ord": 0})["ord"] += r[7]
     return acc
 
-real_neg = {(r[0], r[1], r[2], r[3], r[4]) for r in
-            json.load(open("../.local/views.json", encoding="utf-8"))["negative"]}
+FIXTURES = "../.local/views.json"
+import os as _os
+real_neg = set()
+if _os.path.exists(FIXTURES):
+    real_neg = {(r[0], r[1], r[2], r[3], r[4]) for r in
+                json.load(open(FIXTURES, encoding="utf-8"))["negative"]}
 key_of_neg = lambda neg: (neg[3], neg[4], neg[0], neg[1], neg[2])  # tipo,prod,var,clone,root
 
 # Guarantee that the published data still demonstrates shortages.
@@ -94,6 +112,7 @@ acc = aggregate(lotti, ordini)
 neg = [k for k, v in acc.items() if v["mag"] - v["ord"] < 0]
 keys = len({(r[2], r[3], r[4], r[5], r[6]) for r in lotti} |
            {(r[2], r[3], r[4], r[5], r[6]) for r in ordini})
+print("orders linked to a lot: %d/%d" % (linked, len(ordini)))
 print("published: viti=%d portainnesti=%d lotti=%d ordini=%d keys=%d negatives=%d"
       % (len(snap["viti"]), len(snap["portainnesti"]), len(lotti),
          len(ordini), keys, len(neg)))

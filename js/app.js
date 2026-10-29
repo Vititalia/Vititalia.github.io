@@ -16,11 +16,13 @@ const ROUTES = [
   { re: /^\/r\/disponibilita$/, view: R.viewDisponibilita, cap: 'r.disponibilita', title: 'Riepilogo disponibilità', crumb: 'Riepiloghi / Disponibilità' },
   { re: /^\/r\/produttore$/, view: R.viewPerProduttore, cap: 'r.produttore', title: 'Riepilogo per produttore', crumb: 'Riepiloghi / Per produttore' },
   { re: /^\/r\/indisponibilita$/, view: R.viewIndisponibilita, cap: 'r.indisponibilita', title: 'Indisponibilità', crumb: 'Riepiloghi / Indisponibilità' },
+  { re: /^\/r\/daspedire$/, view: R.viewDaSpedire, cap: 'r.daspedire', title: 'Da spedire', crumb: 'Riepiloghi / Da spedire' },
   { re: /^\/dati\/lotti$/, view: D.viewLotti, cap: 'dati.lotti', title: 'Lotti magazzino', crumb: 'Dati / Lotti magazzino', pcOnly: true },
   { re: /^\/dati\/ordini$/, view: D.viewOrdini, cap: 'dati.ordini', title: 'Ordini e impegni', crumb: 'Dati / Ordini e impegni', pcOnly: true },
   { re: /^\/dati\/import$/, view: D.viewImport, cap: 'dati.import', title: 'Import CSV', crumb: 'Dati / Import', pcOnly: true },
   { re: /^\/anagrafiche\/viti$/, view: D.viewViti, cap: 'anag.viti', title: 'Anagrafica vite', crumb: 'Anagrafiche / Viti' },
   { re: /^\/anagrafiche\/portainnesti$/, view: D.viewPortainnesti, cap: 'anag.portainnesti', title: 'Anagrafica portainnesto', crumb: 'Anagrafiche / Portainnesti' },
+  { re: /^\/config\/utenti$/, view: R.viewUtenti, cap: 'config.utenti', title: 'Utenti', crumb: 'Configurazione / Utenti' },
   { re: /^\/config\/permessi$/, view: R.viewPermessi, cap: 'config.permessi', title: 'Ruoli e permessi', crumb: 'Configurazione / Permessi' },
   { re: /^\/profilo$/, view: R.viewProfilo, cap: 'profilo', title: 'Profilo', crumb: 'Profilo' },
 ];
@@ -148,7 +150,7 @@ export function render() {
   if (session && path === '/login') { navigate('#/home'); return; }
 
   const ctx = {
-    role, params, navigate, refresh: () => render(),
+    role, params, path, navigate, refresh: () => render(),
     session, user: session ? session.user : null, login, logout,
   };
 

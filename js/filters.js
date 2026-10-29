@@ -1,30 +1,50 @@
-/* Vignero · filters.js — the single filter control used by every report (spec S-10) */
+/* Vignero · filters.js — the shared report filter bar */
 import * as S from './store.js';
 import * as U from './ui.js';
 
 export const EMPTY = { tipologia: '', produzione: '', varieta: '', portainnesto: '', produttore: '' };
 
-export function parseFilters(params) {
+/** Reports do not show tipologia/produzione, so these two are mandatory defaults. */
+export function mandatoryDefaults() {
   return {
+    tipologia: S.store.meta.defaultTipologia || 'Barbatelle innestate',
+    produzione: S.store.meta.defaultProduzione || 'Nuova produzione',
+  };
+}
+
+/**
+ * Reads the filters from the URL. With `mandatory: true` the report's required
+ * filters are always filled, so a table can never be opened without them.
+ */
+export function parseFilters(params, opts = {}) {
+  const f = {
     tipologia: params.get('tipologia') || '',
     produzione: params.get('produzione') || '',
     varieta: params.get('varieta') || '',
     portainnesto: params.get('portainnesto') || '',
     produttore: params.get('produttore') || '',
   };
+  const d = mandatoryDefaults();
+  const required = opts.mandatory === true ? Object.keys(d)
+    : Array.isArray(opts.mandatory) ? opts.mandatory : [];
+  for (const k of required) if (!f[k]) f[k] = d[k];
+  return f;
 }
 
 export function serializeFilters(f) {
   const p = new URLSearchParams();
-  for (const k of ['tipologia', 'produzione', 'varieta', 'portainnesto', 'produttore']) if (f[k]) p.set(k, f[k]);
+  for (const k of ['tipologia', 'produzione', 'varieta', 'portainnesto', 'produttore']) {
+    if (f[k]) p.set(k, f[k]);
+  }
   const s = p.toString();
   return s ? '?' + s : '';
 }
 
-export function activeChips(f) {
+export function activeChips(f, opts = {}) {
+  const skip = new Set(opts.skip || []);
   const out = [];
-  if (f.tipologia) out.push({ key: 'tipologia', label: 'Tipologia: ' + f.tipologia });
-  if (f.produzione) out.push({ key: 'produzione', label: 'Produzione: ' + f.produzione });
+  if (f.tipologia && !skip.has('tipologia')) out.push({ key: 'tipologia', label: 'Tipologia: ' + f.tipologia });
+  if (f.produzione && !skip.has('produzione')) out.push({ key: 'produzione', label: 'Produzione: ' + f.produzione });
   if (f.varieta) out.push({ key: 'varieta', label: 'Varietà: ' + f.varieta });
   if (f.portainnesto) out.push({ key: 'portainnesto', label: 'Portainnesto: ' + f.portainnesto });
   if (f.produttore) out.push({ key: 'produttore', label: 'Produttore: ' + f.produttore });
@@ -32,36 +52,39 @@ export function activeChips(f) {
 }
 
 /**
- * Renders the filter bar into `host`. onChange(nextFilters) is called on every
- * change (the caller owns navigation / re-render).
+ * filterBar(host, filters, onChange, {
+ *   showVarieta, showPortainnesto, showProduttore,
+ *   mandatory: ['tipologia','produzione']   // required selects, no empty option
+ * })
  */
 export function filterBar(host, filters, onChange, opts = {}) {
   const showVarieta = opts.showVarieta !== false;
   const showPortainnesto = opts.showPortainnesto === true;
   const showProduttore = opts.showProduttore === true;
-  const tid = 'f-tip-' + Math.random().toString(36).slice(2, 7);
-  const pid = 'f-prod-' + Math.random().toString(36).slice(2, 7);
+  const mandatory = new Set(opts.mandatory || []);
+  const defaults = mandatoryDefaults();
+  const tid = 'f-' + Math.random().toString(36).slice(2, 7);
+
+  const options = (name, list) => {
+    if (mandatory.has(name)) {
+      return list.map((t) => `<option value="${U.esc(t)}"${(filters[name] || defaults[name]) === t ? ' selected' : ''}>${U.esc(t)}</option>`).join('');
+    }
+    return `<option value="">Tutte</option>` +
+      list.map((t) => `<option value="${U.esc(t)}"${filters[name] === t ? ' selected' : ''}>${U.esc(t)}</option>`).join('');
+  };
 
   host.innerHTML = `
     <div class="filters" role="group" aria-label="Filtri">
-      <label class="field" for="${tid}" style="margin:0">
-        <span>Tipologia</span>
-        <select id="${tid}" data-filter="tipologia">
-          <option value="">Tutte</option>
-          ${S.store.meta.tipologie.map((t) =>
-            `<option value="${U.esc(t)}"${filters.tipologia === t ? ' selected' : ''}>${U.esc(t)}</option>`).join('')}
-        </select>
+      <label class="field" for="${tid}-tip" style="margin:0">
+        <span>Tipologia${mandatory.has('tipologia') ? ' <em class="req">obbligatoria</em>' : ''}</span>
+        <select id="${tid}-tip" data-filter="tipologia">${options('tipologia', S.store.meta.tipologie)}</select>
       </label>
-      <label class="field" for="${pid}" style="margin:0">
-        <span>Produzione</span>
-        <select id="${pid}" data-filter="produzione">
-          <option value="">Tutte</option>
-          ${S.store.meta.produzioni.map((t) =>
-            `<option value="${U.esc(t)}"${filters.produzione === t ? ' selected' : ''}>${U.esc(t)}</option>`).join('')}
-        </select>
+      <label class="field" for="${tid}-prod" style="margin:0">
+        <span>Produzione${mandatory.has('produzione') ? ' <em class="req">obbligatoria</em>' : ''}</span>
+        <select id="${tid}-prod" data-filter="produzione">${options('produzione', S.store.meta.produzioni)}</select>
       </label>
       <div class="field" style="margin:0" ${showVarieta ? '' : 'hidden'}>
-        <span id="${tid}-v">Codice varietà</span>
+        <span>Codice varietà</span>
         <div id="${tid}-combo"></div>
       </div>
       <div class="field" style="margin:0" ${showPortainnesto ? '' : 'hidden'}>
@@ -82,13 +105,13 @@ export function filterBar(host, filters, onChange, opts = {}) {
     </div>
     <div class="chips" id="${tid}-chips"></div>`;
 
-  const next = (patch) => {
-    const f = { ...filters, ...patch };
-    onChange(f);
-  };
+  const next = (patch) => onChange({ ...filters, ...patch });
 
   host.querySelectorAll('[data-filter]').forEach((sel) => {
-    sel.addEventListener('change', () => next({ [sel.dataset.filter]: sel.value }));
+    sel.addEventListener('change', () => {
+      if (mandatory.has(sel.dataset.filter) && !sel.value) sel.value = defaults[sel.dataset.filter];
+      next({ [sel.dataset.filter]: sel.value });
+    });
   });
 
   if (showVarieta) {
@@ -111,13 +134,13 @@ export function filterBar(host, filters, onChange, opts = {}) {
   }
 
   host.querySelector('[data-reset]').addEventListener('click', () => {
-    if (!filters.tipologia && !filters.produzione && !filters.varieta &&
-        !filters.portainnesto && !filters.produttore) return;
-    onChange({ ...EMPTY });
+    const cleared = activeChips(filters, { skip: [...mandatory] }).length;
+    if (!cleared) return;
+    onChange({ ...EMPTY, ...(mandatory.size ? defaults : {}) });
   });
 
   const chips = host.querySelector(`#${tid}-chips`);
-  const list = activeChips(filters);
+  const list = activeChips(filters, { skip: [...mandatory] });
   chips.innerHTML = list.map((c) =>
     `<button class="chip" type="button" data-chip="${c.key}">
         <b>${U.esc(c.label)}</b><span aria-hidden="true">✕</span>

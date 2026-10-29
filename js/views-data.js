@@ -1,33 +1,32 @@
-/* Vignero · views-data.js — data entry (PC only), import, master data */
+/* Vignero · views-data.js — data entry (PC only), import, master data with CRUD */
 import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
 
 const PAGE = 40;
-const state = { lottiLimit: PAGE, vitiLimit: 60, search: '', produttore: '' };
+/* one search term per list: a filter typed on one page must not leak into another */
+const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', vitiSearch: '', rootsSearch: '', produttore: '' };
 
 /* ------------------------------------------------------------- form bits */
 function selectHTML(name, label, options, value, extra = '') {
   return `<label class="field"><span>${U.esc(label)}</span>
       <select name="${name}"${extra}>
         <option value="">— seleziona —</option>
-        ${options.map((o) => `<option value="${U.esc(o)}"${o === value ? ' selected' : ''}>${U.esc(o)}</option>`).join('')}
+        ${options.map((o) => `<option value="${U.esc(o)}"${String(o) === String(value) ? ' selected' : ''}>${U.esc(o)}</option>`).join('')}
       </select></label>`;
 }
 
-function yearRange() {
+function yearRange(current) {
   const y = new Date().getFullYear();
   const out = [];
   for (let i = y + 1; i >= y - 8; i--) out.push(String(i));
+  if (current && !out.includes(String(current))) out.unshift(String(current));
   return out;
 }
 
-function cloneOptions(varieta) {
-  if (!varieta) return [];
-  return S.clonesOf(varieta);
-}
+const cloneOptions = (varieta) => (varieta ? S.clonesOf(varieta) : []);
 
-/** Dependent variety → clone pair, shared by the lot and order forms. */
+/** Dependent variety → clone pair (F-V2), shared by both forms. */
 function wireVarietyClone(scope, preset = {}) {
   const cloneSel = scope.querySelector('[name="clone"]');
   const errBox = scope.querySelector('[data-clone-hint]');
@@ -53,14 +52,13 @@ function wireVarietyClone(scope, preset = {}) {
     value: preset.varieta || '',
     onPick: (value) => {
       varieta = value;
-      if (hidden) hidden.value = value;      // makes the form self-contained
+      if (hidden) hidden.value = value;
       paintClones(value, '');
     },
   });
   paintClones(varieta, preset.clone);
   return {
     get varieta() { return varieta; },
-    /** Sets both box and clone list (used when a lot prefills the dimensions). */
     setVarieta(v, clone) {
       varieta = v;
       if (hidden) hidden.value = v;
@@ -71,9 +69,14 @@ function wireVarietyClone(scope, preset = {}) {
   };
 }
 
+const actions = (id) => `<div class="row" style="gap:6px">
+    <button class="btn btn-secondary btn-sm" type="button" data-edit="${U.esc(id)}">Modifica</button>
+    <button class="btn btn-danger btn-sm" type="button" data-del="${U.esc(id)}">Elimina</button>
+  </div>`;
+
 /* --------------------------------------------------------- S-13 lotti */
 export function viewLotti(root, ctx) {
-  const q = state.search.toLowerCase();
+  const q = state.lottiSearch.toLowerCase();
   const list = S.store.lotti
     .filter((l) => !state.produttore || l.produttore === state.produttore)
     .filter((l) => !q || [l.produttore, l.varieta, l.clone, l.portainnesto, l.tipologia]
@@ -86,7 +89,7 @@ export function viewLotti(root, ctx) {
     <div class="page-head"><div>
       <p class="eyebrow">Dati / Lotti magazzino</p>
       <h1>Lotti magazzino</h1>
-      <p class="sub">${U.fmtQty(list.length)} lotti · inserimento disponibile solo da PC</p>
+      <p class="sub">${U.fmtQty(list.length)} lotti · inserimento, modifica ed eliminazione da PC</p>
     </div>
     <div class="spacer"></div>
     <div class="row">
@@ -97,7 +100,7 @@ export function viewLotti(root, ctx) {
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
         <label class="field" style="margin:0"><span>Cerca</span>
-          <input type="search" id="q" value="${U.esc(state.search)}" placeholder="produttore, varietà, clone…"></label>
+          <input type="search" id="q" value="${U.esc(state.lottiSearch)}" placeholder="produttore, varietà, clone…"></label>
         <label class="field" style="margin:0"><span>Produttore</span>
           <select id="prod">
             <option value="">Tutti</option>
@@ -109,7 +112,8 @@ export function viewLotti(root, ctx) {
     <div class="report">${U.buildTable({
       caption: 'Anagrafica validata: varietà → clone → portainnesto. Quantità intere.',
       cols: [{ label: 'Anno' }, { label: 'Produttore' }, { label: 'Tipologia' }, { label: 'Produzione' },
-             { label: 'Varietà' }, { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' }, { label: 'Note' }],
+             { label: 'Varietà' }, { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' },
+             { label: 'Azioni' }],
       rows: shown.length ? shown.map((l) => ({
         type: 'row',
         cells: [
@@ -118,17 +122,17 @@ export function viewLotti(root, ctx) {
           { html: U.esc(l.tipologia || S.NON_INDICATA), label: 'Tipologia' },
           { html: U.esc(l.produzione || S.NON_INDICATA), label: 'Produzione' },
           { html: `<span class="ident">${U.esc(l.varieta)}</span>`, label: 'Varietà' },
-          { html: `<span class="ident">${U.esc(l.clone)}</span>`, label: 'Clone' },
+          { html: `<span class="ident">${U.esc(l.clone)}</span>`, label: 'Clone', cls: 'cell-sub' },
           { html: `<span class="ident">${U.esc(l.portainnesto)}</span>`, label: 'Portainnesto' },
           U.metric('Quantità', U.fmtQty(l.quantita)),
-          { html: U.esc(l.note || ''), label: 'Note' },
+          { html: actions(l.id), label: 'Azioni', cls: 'no-print' },
         ],
       })) : [{ type: 'empty', cells: [{ html: 'Nessun lotto con questi criteri.' }] }],
     })}</div>
     ${list.length > shown.length ? `<div class="mt"><button class="btn btn-secondary btn-block" type="button" id="more">Mostra altri ${Math.min(PAGE, list.length - shown.length)} lotti</button></div>` : ''}`;
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
-    state.search = e.target.value; state.lottiLimit = PAGE; ctx.refresh();
+    state.lottiSearch = e.target.value; state.lottiLimit = PAGE; ctx.refresh();
   }, 250));
   root.querySelector('#prod').addEventListener('change', (e) => {
     state.produttore = e.target.value; state.lottiLimit = PAGE; ctx.refresh();
@@ -137,58 +141,83 @@ export function viewLotti(root, ctx) {
   if (more) more.addEventListener('click', () => { state.lottiLimit += PAGE; ctx.refresh(); });
   root.querySelector('#importBtn').addEventListener('click', () => ctx.navigate('#/dati/import'));
   root.querySelector('#newBtn').addEventListener('click', () => openLottoForm(ctx));
+
+  root.querySelectorAll('[data-edit]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const lot = S.store.lotti.find((x) => x.id === b.dataset.edit);
+      if (lot) openLottoForm(ctx, lot);
+    });
+  });
+  root.querySelectorAll('[data-del]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const lot = S.store.lotti.find((x) => x.id === b.dataset.del);
+      if (!lot) return;
+      U.confirmSheet({
+        title: 'Eliminare il lotto?',
+        message: `${lot.anno} · ${lot.produttore || '—'} · ${lot.varieta} · ${lot.clone} · ${U.fmtQty(lot.quantita)}. L'operazione non è reversibile.`,
+        confirmLabel: 'Elimina', danger: true,
+        onConfirm: () => {
+          const res = S.deleteLotto(lot.id);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+          U.toast('Lotto eliminato');
+          ctx.refresh();
+        },
+      });
+    });
+  });
 }
 
-function openLottoForm(ctx) {
-  const body = `
-    <form id="lotForm" novalidate>
-      ${selectHTML('anno', 'Anno di conferimento', yearRange(), new Date().getFullYear())}
-      ${selectHTML('produttore', 'Produttore', S.store.meta.produttori)}
-      ${selectHTML('tipologia', 'Tipologia', S.store.meta.tipologie)}
-      ${selectHTML('produzione', 'Produzione', S.store.meta.produzioni)}
-      <label class="field"><span>Codice varietà</span><div data-variety></div></label>
-      <input type="hidden" name="varieta">
-      ${selectHTML('clone', 'Codice clone', [], '', ' disabled')}
-      <p class="field-error" data-clone-hint></p>
-      ${selectHTML('portainnesto', 'Codice portainnesto', S.store.index.rootstocks)}
-      <label class="field"><span>Quantità (interi, no decimali)</span>
-        <input type="number" name="quantita" min="0" step="1" inputmode="numeric" required></label>
-      <label class="field"><span>Note</span><textarea name="note" maxlength="500"></textarea></label>
-      <p class="field-error" id="formErr" hidden></p>
-    </form>`;
-
+function openLottoForm(ctx, existing) {
+  const isEdit = !!existing;
+  let submitFn = null;
   U.openSheet({
-    title: 'Nuovo lotto',
-    body,
+    title: isEdit ? 'Modifica lotto' : 'Nuovo lotto',
+    body: `
+      <form id="lotForm" novalidate>
+        ${selectHTML('anno', 'Anno di conferimento', yearRange(existing && existing.anno), existing ? existing.anno : new Date().getFullYear())}
+        ${selectHTML('produttore', 'Produttore', S.store.meta.produttori, existing && existing.produttore)}
+        ${selectHTML('tipologia', 'Tipologia', S.store.meta.tipologie, existing && existing.tipologia)}
+        ${selectHTML('produzione', 'Produzione', S.store.meta.produzioni, existing && existing.produzione)}
+        <label class="field"><span>Codice varietà</span><div data-variety></div></label>
+        <input type="hidden" name="varieta">
+        ${selectHTML('clone', 'Codice clone', [], '', ' disabled')}
+        <p class="field-error" data-clone-hint></p>
+        ${selectHTML('portainnesto', 'Codice portainnesto', S.store.index.rootstocks, existing && existing.portainnesto)}
+        <label class="field"><span>Quantità (interi, no decimali)</span>
+          <input type="number" name="quantita" min="0" step="1" inputmode="numeric" required
+                 value="${existing ? existing.quantita : ''}"></label>
+        <label class="field"><span>Note</span><textarea name="note" maxlength="500">${existing && existing.note ? U.esc(existing.note) : ''}</textarea></label>
+        <p class="field-error" id="formErr" hidden></p>
+      </form>`,
     actions: [
       { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
-      { label: 'Salva', class: 'btn-primary', run: submit },
+      { label: isEdit ? 'Salva modifiche' : 'Salva', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
     ],
-    onMount: (sheet) => wireVarietyClone(sheet),
+    onMount: (sheet) => {
+      wireVarietyClone(sheet, { varieta: existing && existing.varieta, clone: existing && existing.clone });
+      function submit() {
+        const form = sheet.querySelector('#lotForm');
+        if (!form || !form.isConnected) return;
+        const data = Object.fromEntries(new FormData(form).entries());
+        const errs = S.validateLotto(data);
+        const keys = Object.keys(errs);
+        const box = sheet.querySelector('#formErr');
+        if (keys.length) {
+          box.hidden = false;
+          box.textContent = keys.map((k) => errs[k]).join(' ');
+          const first = form.querySelector(`[name="${keys[0]}"]`);
+          if (first) { first.setAttribute('aria-invalid', 'true'); first.focus(); }
+          return;
+        }
+        if (isEdit) S.updateLotto(existing.id, data);
+        else S.addLotto(data);
+        U.closeSheet();
+        U.toast(isEdit ? 'Lotto aggiornato' : 'Lotto salvato');
+        ctx.refresh();
+      }
+      submitFn = submit;
+    },
   });
-
-  function submit() {
-    const sheet = document.querySelector('.sheet');
-    if (!sheet) return;
-    const f = sheet.querySelector('#lotForm');
-    if (!f || !f.isConnected) return;
-    const data = Object.fromEntries(new FormData(f).entries());
-    const errs = S.validateLotto(data);
-    sheet.querySelectorAll('.field-error').forEach((e) => { if (e.id === 'formErr') e.hidden = true; });
-    const keys = Object.keys(errs);
-    if (keys.length) {
-      const box = sheet.querySelector('#formErr');
-      box.hidden = false;
-      box.textContent = keys.map((k) => errs[k]).join(' ');
-      const first = sheet.querySelector(`[name="${keys[0]}"]`);
-      if (first) { first.setAttribute('aria-invalid', 'true'); first.focus(); }
-      return;
-    }
-    S.addLotto(data);
-    U.closeSheet();
-    U.toast('Lotto salvato');
-    ctx.refresh();
-  }
 }
 
 /* ------------------------------------------------------- S-14 ordini */
@@ -199,7 +228,7 @@ export function viewOrdini(root, ctx) {
       <p class="eyebrow">Dati / Ordini e impegni</p>
       <h1>Ordini e impegni</h1>
       <p class="sub">${U.fmtQty(list.length)} impegni · ${U.fmtQty(list.filter((o) => !o.spedito).length)} non spediti ·
-        nessun campo cliente nello schema</p>
+        inserimento, modifica ed eliminazione da PC</p>
     </div>
     <div class="spacer"></div>
     <div class="row">
@@ -208,26 +237,28 @@ export function viewOrdini(root, ctx) {
     </div></div>
 
     <div class="banner banner-info"><span aria-hidden="true">i</span>
-      <span>L'impegno punta a un lotto (<code>id_magazzino</code>): solo così la quantità entra nella colonna di un produttore.
-      Senza lotto finisce in <b>Non attribuito</b>.</span></div>
+      <span>Ogni impegno è collegato a un lotto (<code>id_magazzino</code>): è così che la quantità entra
+      nella colonna del produttore nel riepilogo per produttore.</span></div>
 
     <div class="report">${U.buildTable({
       caption: 'Il flag Spedito è un booleano: alimenta «Di cui spedito» nei riepiloghi.',
       cols: [{ label: 'Lotto collegato' }, { label: 'Tipologia' }, { label: 'Produzione' }, { label: 'Varietà' },
-             { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' }, { label: 'Spedito' }],
+             { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' },
+             { label: 'Spedito' }, { label: 'Azioni' }],
       rows: list.length ? list.map((o) => {
         const lot = o.id_magazzino ? S.store.index.lotById.get(o.id_magazzino) : null;
         return {
           type: 'row',
           cells: [
-            { html: lot ? `<span class="ident">${U.esc(lot.produttore || '—')}<small>${U.esc(lot.anno)} · ${U.esc(lot.varieta)}</small></span>` : '<span style="color:var(--ink-300)">—</span>', label: 'Lotto collegato' },
+            { html: lot ? `<span class="ident">${U.esc(lot.produttore || '—')}<small>${U.esc(lot.anno)} · ${U.esc(lot.varieta)}</small></span>` : '<span style="color:var(--ink-300)">—</span>', label: 'Lotto collegato', cls: 'ident' },
             { html: U.esc(o.tipologia), label: 'Tipologia' },
             { html: U.esc(o.produzione), label: 'Produzione' },
             { html: `<span class="ident">${U.esc(o.varieta)}</span>`, label: 'Varietà' },
             { html: `<span class="ident">${U.esc(o.clone)}</span>`, label: 'Clone' },
-            { html: `<span class="ident">${U.esc(o.portainnesto)}</span>`, label: 'Portainnesto' },
+            { html: `<span class="ident">${U.esc(o.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
             U.metric('Quantità', U.fmtQty(o.quantita)),
             { html: `<button class="btn btn-sm ${o.spedito ? 'btn-primary' : 'btn-secondary'}" type="button" data-toggle="${U.esc(o.id)}" aria-pressed="${o.spedito}">${o.spedito ? '✓ Spedito' : 'Segna spedito'}</button>`, label: 'Spedito' },
+            { html: actions(o.id), label: 'Azioni', cls: 'no-print' },
           ],
         };
       }) : [{ type: 'empty', cells: [{ html: 'Nessun impegno registrato.' }] }],
@@ -243,65 +274,96 @@ export function viewOrdini(root, ctx) {
       });
     });
   });
+  root.querySelectorAll('[data-edit]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const ord = S.store.ordini.find((x) => x.id === b.dataset.edit);
+      if (ord) openOrdineForm(ctx, ord);
+    });
+  });
+  root.querySelectorAll('[data-del]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const ord = S.store.ordini.find((x) => x.id === b.dataset.del);
+      if (!ord) return;
+      U.confirmSheet({
+        title: 'Eliminare l\'impegno?',
+        message: `${ord.varieta} · ${ord.clone} · ${ord.portainnesto} · ${U.fmtQty(ord.quantita)}. L'operazione non è reversibile.`,
+        confirmLabel: 'Elimina', danger: true,
+        onConfirm: () => {
+          S.deleteOrdine(ord.id);
+          U.toast('Impegno eliminato');
+          ctx.refresh();
+        },
+      });
+    });
+  });
   root.querySelector('#newBtn').addEventListener('click', () => openOrdineForm(ctx));
   root.querySelector('#importBtn').addEventListener('click', () => ctx.navigate('#/dati/import'));
 }
 
-function openOrdineForm(ctx) {
+function openOrdineForm(ctx, existing) {
+  const isEdit = !!existing;
   const lotItems = S.store.lotti.map((l) => ({
     value: l.id,
     label: `${l.produttore || 'Non attribuito'} · ${l.anno} · ${l.varieta} · ${l.clone}`,
     sub: `${l.portainnesto} · ${U.fmtQty(l.quantita)} piante`,
   }));
-  const body = `
-    <form id="ordForm" novalidate>
-      <label class="field"><span>Lotto collegato (facoltativo)</span><div data-lot></div></label>
-      ${selectHTML('tipologia', 'Tipologia', S.store.meta.tipologie)}
-      ${selectHTML('produzione', 'Produzione', S.store.meta.produzioni)}
-      <label class="field"><span>Codice varietà</span><div data-variety></div></label>
-      <input type="hidden" name="varieta">
-      ${selectHTML('clone', 'Codice clone', [], '', ' disabled')}
-      <p class="field-error" data-clone-hint></p>
-      ${selectHTML('portainnesto', 'Codice portainnesto', S.store.index.rootstocks)}
-      <label class="field"><span>Quantità ordinata</span>
-        <input type="number" name="quantita" min="1" step="1" inputmode="numeric" required></label>
-      <label class="field" style="display:flex;gap:10px;align-items:center">
-        <input type="checkbox" name="spedito" style="width:20px;height:20px;min-height:0">
-        <span style="margin:0">Già spedito</span></label>
-      <label class="field"><span>Note</span><textarea name="note" maxlength="500"></textarea></label>
-      <div id="impact"></div>
-      <p class="field-error" id="formErr" hidden></p>
-    </form>`;
-
+  const existingLot = existing && existing.id_magazzino
+    ? S.store.index.lotById.get(existing.id_magazzino) : null;
   let submitFn = null;
+
   U.openSheet({
-    title: 'Nuovo impegno',
-    body,
+    title: isEdit ? 'Modifica impegno' : 'Nuovo impegno',
+    body: `
+      <form id="ordForm" novalidate>
+        <label class="field"><span>Lotto collegato (obbligatorio)</span><div data-lot></div></label>
+        <input type="hidden" name="id_magazzino" value="${existing && existing.id_magazzino ? existing.id_magazzino : ''}">
+        ${selectHTML('tipologia', 'Tipologia', S.store.meta.tipologie, existing && existing.tipologia)}
+        ${selectHTML('produzione', 'Produzione', S.store.meta.produzioni, existing && existing.produzione)}
+        <label class="field"><span>Codice varietà</span><div data-variety></div></label>
+        <input type="hidden" name="varieta">
+        ${selectHTML('clone', 'Codice clone', [], '', ' disabled')}
+        <p class="field-error" data-clone-hint></p>
+        ${selectHTML('portainnesto', 'Codice portainnesto', S.store.index.rootstocks, existing && existing.portainnesto)}
+        <label class="field"><span>Quantità ordinata</span>
+          <input type="number" name="quantita" min="1" step="1" inputmode="numeric" required
+                 value="${existing ? existing.quantita : ''}"></label>
+        <label class="field" style="display:flex;gap:10px;align-items:center">
+          <input type="checkbox" name="spedito" style="width:20px;height:20px;min-height:0"${existing && existing.spedito ? ' checked' : ''}>
+          <span style="margin:0">Già spedito</span></label>
+        <label class="field"><span>Note</span><textarea name="note" maxlength="500">${existing && existing.note ? U.esc(existing.note) : ''}</textarea></label>
+        <div id="impact"></div>
+        <p class="field-error" id="formErr" hidden></p>
+      </form>`,
     actions: [
       { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
-      { label: 'Salva', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
+      { label: isEdit ? 'Salva modifiche' : 'Salva', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
     ],
     onMount: (sheet) => {
-      const vc = wireVarietyClone(sheet);
       const form = sheet.querySelector('#ordForm');
-      let chosenLot = null;
-      U.combobox(sheet.querySelector('[data-lot]'), {
-        items: lotItems, placeholder: 'Cerca lotto (produttore, varietà, clone)…',
-        onPick: (id, item) => {
+      const vc = wireVarietyClone(sheet, { varieta: existing && existing.varieta, clone: existing && existing.clone });
+      const lotBox = U.combobox(sheet.querySelector('[data-lot]'), {
+        items: lotItems,
+        placeholder: 'Cerca lotto (produttore, varietà, clone)…',
+        onPick: (id) => {
           const lot = S.store.index.lotById.get(id);
           if (!lot) return;
-          chosenLot = lot;
+          form.elements.id_magazzino.value = lot.id;
           form.elements.tipologia.value = lot.tipologia || '';
           form.elements.produzione.value = lot.produzione || '';
           form.elements.portainnesto.value = lot.portainnesto || '';
           if (vc && vc.setVarieta) vc.setVarieta(lot.varieta, lot.clone);
-          if (item) U.toast('Dimensioni compilate dal lotto');
+          updateImpact();
+          U.toast('Dimensioni compilate dal lotto');
         },
       });
+      if (existingLot) {
+        lotBox.set(existingLot.id, `${existingLot.produttore || '—'} · ${existingLot.anno} · ${existingLot.varieta} · ${existingLot.clone}`);
+      }
+
       form.addEventListener('change', updateImpact);
       form.addEventListener('input', U.debounce(updateImpact, 300));
       function updateImpact() {
-        if (!form || !form.isConnected) return;   // sheet already closed
+        if (!form || !form.isConnected) return;
         const data = Object.fromEntries(new FormData(form).entries());
         const box = form.querySelector('#impact');
         if (!data.varieta || !data.clone || !data.quantita) { box.innerHTML = ''; return; }
@@ -313,22 +375,24 @@ function openOrdineForm(ctx) {
       function submit() {
         if (!form || !form.isConnected) return;
         const data = Object.fromEntries(new FormData(form).entries());
+        data.spedito = form.elements.spedito.checked;
         const errs = S.validateOrdine(data);
+        if (!data.id_magazzino) errs.id_magazzino = 'Collega l\'impegno a un lotto.';
         const keys = Object.keys(errs);
-        const errBox = form.querySelector('#formErr');
+        const box = form.querySelector('#formErr');
         if (keys.length) {
-          errBox.hidden = false;
-          errBox.textContent = keys.map((k) => errs[k]).join(' ');
-          const first = form.querySelector(`[name="${keys[0]}"]`);
-          if (first) { first.setAttribute('aria-invalid', 'true'); first.focus(); }
+          box.hidden = false;
+          box.textContent = keys.map((k) => errs[k]).join(' ');
           return;
         }
-        S.addOrdine({ ...data, id_magazzino: chosenLot ? chosenLot.id : null });
+        if (isEdit) S.updateOrdine(existing.id, data);
+        else S.addOrdine(data);
         U.closeSheet();
-        U.toast('Impegno salvato');
+        U.toast(isEdit ? 'Impegno aggiornato' : 'Impegno salvato');
         ctx.refresh();
       }
       submitFn = submit;
+      updateImpact();
     },
   });
 }
@@ -353,7 +417,7 @@ export function viewImport(root, ctx) {
           <input type="file" id="file" accept=".csv,text/csv"></label>
       </div>
       <p class="hint">Lotti: <code>anno;produttore;tipologia;produzione;varieta;clone;portainnesto;quantita;note</code><br>
-        Ordini: <code>tipologia;produzione;varieta;clone;portainnesto;quantita;spedito;note</code>
+        Ordini: <code>tipologia;produzione;varieta;clone;portainnesto;quantita;id_magazzino;spedito;note</code>
         (<code>spedito</code> = sì/no, true/false, 1/0)</p>
     </div>
     <div id="importOut"></div>`;
@@ -434,7 +498,7 @@ function parseCSV(text) {
       else cur += ch;
     }
     out.push(cur);
-    return out.map((s) => s.trim());
+    return out.map((s2) => s2.trim());
   };
   const headers = split(lines[0]).map((h) => h.toLowerCase().replace(/\s+/g, '_'));
   const rows = lines.slice(1).map((l) => split(l));
@@ -452,23 +516,26 @@ function validateRows(rows, headers, kind) {
   const errors = [];
   rows.forEach((row, n) => {
     const riga = n + 2;
-    const varieta = pick(row, 'varieta');
-    const clone = pick(row, 'clone');
-    const portainnesto = pick(row, 'portainnesto');
-    const quantita = pick(row, 'quantita');
     const rec = kind === 'lotti'
       ? {
           anno: pick(row, 'anno'), produttore: pick(row, 'produttore'),
           tipologia: pick(row, 'tipologia'), produzione: pick(row, 'produzione'),
-          varieta, clone, portainnesto, quantita, note: pick(row, 'note') || null,
+          varieta: pick(row, 'varieta'), clone: pick(row, 'clone'),
+          portainnesto: pick(row, 'portainnesto'), quantita: pick(row, 'quantita'),
+          note: pick(row, 'note') || null,
         }
       : {
           tipologia: pick(row, 'tipologia'), produzione: pick(row, 'produzione'),
-          varieta, clone, portainnesto, quantita, note: pick(row, 'note') || null,
+          varieta: pick(row, 'varieta'), clone: pick(row, 'clone'),
+          portainnesto: pick(row, 'portainnesto'), quantita: pick(row, 'quantita'),
+          note: pick(row, 'note') || null,
           spedito: /^(s[iì]|si|true|1|x|spedito)$/i.test(pick(row, 'spedito') || ''),
-          id_magazzino: null,
+          id_magazzino: pick(row, 'id_magazzino') || null,
         };
     const errs = kind === 'lotti' ? S.validateLotto(rec) : S.validateOrdine(rec);
+    if (kind === 'ordini' && !rec.id_magazzino) {
+      errs.id_magazzino = 'Lotto collegato mancante (colonna id_magazzino)';
+    }
     const local = [];
     for (const [col, motivo] of Object.entries(errs)) {
       local.push({ riga, colonna: col, valore: rec[col] || '(vuoto)', motivo });
@@ -481,7 +548,7 @@ function validateRows(rows, headers, kind) {
 
 /* -------------------------------------------------- S-16 anagrafica vite */
 export function viewViti(root, ctx) {
-  const q = state.search.toLowerCase();
+  const q = state.vitiSearch.toLowerCase();
   const filtered = S.store.viti.filter((v) => !q ||
     v.varieta.toLowerCase().includes(q) || v.clone.toLowerCase().includes(q));
   const groups = new Map();
@@ -495,18 +562,23 @@ export function viewViti(root, ctx) {
   for (const [varieta, clones] of sliced) {
     rows.push({ type: 'group', cells: [{ html: `▦ ${U.esc(varieta)}`, sub: `${clones.length} cloni` }] });
     for (const clone of clones.slice(0, 12)) {
+      const used = S.usageOfPair(varieta, clone);
       rows.push({
         type: 'row',
         cells: [
           { html: `<span class="ident">${U.esc(clone)}</span>`, cls: 'ident', label: 'Codice clone' },
-          { html: `<span class="ident">${U.esc(varieta)}</span>`, label: 'Codice varietà' },
-          U.metric('Utilizzi', U.fmtQty(S.usageOfPair(varieta, clone))),
-          { html: '<span class="badge badge-ok">attiva</span>', label: 'Stato' },
+          { html: `<span class="ident">${U.esc(varieta)}</span>`, label: 'Codice varietà', cls: 'cell-sub' },
+          U.metric('Utilizzi', U.fmtQty(used)),
+          { html: used ? '<span class="badge badge-ok">in uso</span>' : '<span class="badge">libera</span>', label: 'Stato' },
+          { html: `<div class="row" style="gap:6px">
+              <button class="btn btn-secondary btn-sm" type="button" data-edit-pair="${U.esc(varieta)}|${U.esc(clone)}">Modifica</button>
+              <button class="btn btn-danger btn-sm" type="button" data-del-pair="${U.esc(varieta)}|${U.esc(clone)}">Elimina</button>
+            </div>`, label: 'Azioni', cls: 'no-print' },
         ],
       });
     }
     if (clones.length > 12) {
-      rows.push({ type: 'row', cells: [{ html: `<span class="caption">+${clones.length - 12} altri cloni</span>`, span: 4 }] });
+      rows.push({ type: 'row', cells: [{ html: `<span class="caption">+${clones.length - 12} altri cloni</span>`, span: 5 }] });
     }
   }
 
@@ -514,117 +586,195 @@ export function viewViti(root, ctx) {
     <div class="page-head"><div>
       <p class="eyebrow">Anagrafiche / Vite</p>
       <h1>Anagrafica vite</h1>
-      <p class="sub">${U.fmtQty(S.store.viti.length)} coppie varietà/clone · una riga per coppia (nessun campo descrizione)</p>
+      <p class="sub">${U.fmtQty(S.store.viti.length)} coppie varietà/clone · inserimento, modifica ed eliminazione</p>
     </div>
     <div class="spacer"></div>
     <div class="row">${P.can(ctx.role, 'anag.viti') ? '<button class="btn btn-primary" type="button" id="newBtn">+ Varietà / clone</button>' : ''}</div></div>
 
     <div class="card card-pad mb">
       <label class="field" style="margin:0"><span>Cerca varietà o clone</span>
-        <input type="search" id="q" value="${U.esc(state.search)}" placeholder="es. CHARDONNAY"></label>
+        <input type="search" id="q" value="${U.esc(state.vitiSearch)}" placeholder="es. CHARDONNAY"></label>
     </div>
 
     <div class="report">${U.buildTable({
-      caption: 'Raggruppato per varietà: il clone appartiene sempre a una varietà (F-V2).',
-      cols: [{ label: 'Codice clone' }, { label: 'Codice varietà' }, { label: 'Utilizzi', align: 'r' }, { label: 'Stato' }],
+      caption: 'Raggruppato per varietà: il clone appartiene sempre a una varietà (F-V2). Una coppia usata da lotti o impegni non è modificabile né eliminabile.',
+      cols: [{ label: 'Codice clone' }, { label: 'Codice varietà' }, { label: 'Utilizzi', align: 'r' },
+             { label: 'Stato' }, { label: 'Azioni' }],
       rows: rows.length ? rows : [{ type: 'empty', cells: [{ html: 'Nessuna coppia trovata.' }] }],
     })}</div>
     ${varieties.length > sliced.length ? `<div class="mt"><button class="btn btn-secondary btn-block" type="button" id="more">Mostra altre varietà</button></div>` : ''}`;
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
-    state.search = e.target.value; state.vitiLimit = 60; ctx.refresh();
+    state.vitiSearch = e.target.value; state.vitiLimit = 60; ctx.refresh();
   }, 250));
   const more = root.querySelector('#more');
   if (more) more.addEventListener('click', () => { state.vitiLimit += 60; ctx.refresh(); });
+
   const newBtn = root.querySelector('#newBtn');
-  if (newBtn) newBtn.addEventListener('click', () => {
-    U.openSheet({
-      title: 'Nuova varietà / clone',
-      body: `<form id="vitiForm">
-          <label class="field"><span>Codice varietà</span><div data-variety></div></label>
-          <label class="field"><span>Codice clone</span><input type="text" name="clone" required placeholder="es. CL-1"></label>
-          <p class="field-error" id="vitiErr" hidden></p>
-        </form>`,
-      actions: [
-        { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
-        { label: 'Salva', class: 'btn-primary', run: save },
-      ],
-      onMount: (sheet) => {
-        let varieta = '';
-        const combo = U.combobox(sheet.querySelector('[data-variety]'), {
-          items: S.store.index.varieta.map((v) => ({ value: v, label: v })),
-          placeholder: 'Cerca o scrivi una nuova varietà…',
-          onPick: (v) => { varieta = v; },
-        });
-        sheet.querySelector('[data-variety] input').addEventListener('input', (e) => {
-          varieta = e.target.value;   // free text allowed: a variety exists through its pairs
-        });
-        function save() {
-          const clone = sheet.querySelector('[name="clone"]').value;
-          const res = S.addVitiPair(varieta || sheet.querySelector('[data-variety] input').value, clone);
-          const err = sheet.querySelector('#vitiErr');
-          if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
-          U.closeSheet();
-          U.toast('Coppia salvata');
-          ctx.refresh();
-        }
-      },
+  if (newBtn) newBtn.addEventListener('click', () => openPairForm(ctx));
+
+  root.querySelectorAll('[data-edit-pair]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const parts = b.dataset.editPair.split('|');
+      openPairForm(ctx, { varieta: parts[0], clone: parts[1] });
     });
+  });
+  root.querySelectorAll('[data-del-pair]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const parts = b.dataset.delPair.split('|');
+      const varieta = parts[0], clone = parts[1];
+      U.confirmSheet({
+        title: 'Eliminare la coppia?',
+        message: `${varieta} · ${clone}. Se è usata da lotti o impegni l'operazione verrà rifiutata.`,
+        confirmLabel: 'Elimina', danger: true,
+        onConfirm: () => {
+          const res = S.deleteVitiPair(varieta, clone);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+          U.toast('Coppia eliminata');
+          ctx.refresh();
+        },
+      });
+    });
+  });
+}
+
+function openPairForm(ctx, existing) {
+  const isEdit = !!existing;
+  let submitFn = null;
+  U.openSheet({
+    title: isEdit ? 'Modifica varietà / clone' : 'Nuova varietà / clone',
+    body: `<form id="vitiForm">
+        <label class="field"><span>Codice varietà</span><div data-variety></div></label>
+        <label class="field"><span>Codice clone</span>
+          <input type="text" name="clone" required value="${existing ? U.esc(existing.clone) : ''}"
+                 placeholder="es. CL-1" autocapitalize="characters"></label>
+        <p class="field-error" id="vitiErr" hidden></p>
+      </form>`,
+    actions: [
+      { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
+      { label: 'Salva', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
+    ],
+    onMount: (sheet) => {
+      let varieta = existing ? existing.varieta : '';
+      U.combobox(sheet.querySelector('[data-variety]'), {
+        items: S.store.index.varieta.map((v) => ({ value: v, label: v })),
+        placeholder: 'Cerca o scrivi una nuova varietà…',
+        value: varieta,
+        onPick: (v) => { varieta = v; },
+      });
+      const input = sheet.querySelector('[data-variety] input');
+      input.addEventListener('input', () => { varieta = input.value; });
+      function submit() {
+        const clone = sheet.querySelector('[name="clone"]').value;
+        const name = (varieta || input.value || '').trim();
+        const res = isEdit
+          ? S.updateVitiPair({ varieta: existing.varieta, clone: existing.clone }, { varieta: name, clone })
+          : S.addVitiPair(name, clone);
+        const err = sheet.querySelector('#vitiErr');
+        if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+        U.closeSheet();
+        U.toast(isEdit ? 'Coppia aggiornata' : 'Coppia salvata');
+        ctx.refresh();
+      }
+      submitFn = submit;
+    },
   });
 }
 
 /* ---------------------------------------------- S-17 anagrafica portainnesti */
 export function viewPortainnesti(root, ctx) {
-  const q = state.search.toLowerCase();
+  const q = state.rootsSearch.toLowerCase();
   const list = S.store.index.rootstocks.filter((c) => !q || c.toLowerCase().includes(q));
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Anagrafiche / Portainnesti</p>
       <h1>Anagrafica portainnesto</h1>
-      <p class="sub">${U.fmtQty(S.store.portainnesti.length)} codici · solo codice, nessuna descrizione nello schema</p>
+      <p class="sub">${U.fmtQty(S.store.portainnesti.length)} codici · inserimento, modifica ed eliminazione</p>
     </div>
     <div class="spacer"></div>
     <div class="row">${P.can(ctx.role, 'anag.portainnesti') ? '<button class="btn btn-primary" type="button" id="newBtn">+ Portainnesto</button>' : ''}</div></div>
 
     <div class="card card-pad mb">
       <label class="field" style="margin:0"><span>Cerca codice</span>
-        <input type="search" id="q" value="${U.esc(state.search)}" placeholder="es. 1103"></label>
+        <input type="search" id="q" value="${U.esc(state.rootsSearch)}" placeholder="es. 1103"></label>
     </div>
 
     <div class="report">${U.buildTable({
-      caption: 'Il codice portainnesto è la chiave di raggruppamento dei tre riepiloghi.',
-      cols: [{ label: 'Codice portainnesto' }, { label: 'Utilizzi', align: 'r' }, { label: 'Stato' }],
-      rows: list.length ? list.map((c) => ({
-        type: 'row',
-        cells: [
-          { html: `<span class="ident">${U.esc(c)}</span>`, cls: 'ident' },
-          U.metric('Utilizzi', U.fmtQty(S.usageOfRootstock(c))),
-          { html: '<span class="badge badge-ok">attivo</span>', label: 'Stato' },
-        ],
-      })) : [{ type: 'empty', cells: [{ html: 'Nessun portainnesto trovato.' }] }],
+      caption: 'Il codice portainnesto è la chiave di raggruppamento dei riepiloghi. Un codice usato da lotti o impegni non è modificabile né eliminabile.',
+      cols: [{ label: 'Codice portainnesto' }, { label: 'Utilizzi', align: 'r' }, { label: 'Stato' }, { label: 'Azioni' }],
+      rows: list.length ? list.map((c) => {
+        const used = S.usageOfRootstock(c);
+        return {
+          type: 'row',
+          cells: [
+            { html: `<span class="ident">${U.esc(c)}</span>`, cls: 'ident' },
+            U.metric('Utilizzi', U.fmtQty(used)),
+            { html: used ? '<span class="badge badge-ok">in uso</span>' : '<span class="badge">libero</span>', label: 'Stato' },
+            { html: `<div class="row" style="gap:6px">
+                <button class="btn btn-secondary btn-sm" type="button" data-rename="${U.esc(c)}">Modifica</button>
+                <button class="btn btn-danger btn-sm" type="button" data-del-root="${U.esc(c)}">Elimina</button>
+              </div>`, label: 'Azioni', cls: 'no-print' },
+          ],
+        };
+      }) : [{ type: 'empty', cells: [{ html: 'Nessun portainnesto trovato.' }] }],
     })}</div>`;
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
-    state.search = e.target.value; ctx.refresh();
+    state.rootsSearch = e.target.value; ctx.refresh();
   }, 250));
+
   const newBtn = root.querySelector('#newBtn');
-  if (newBtn) newBtn.addEventListener('click', () => {
-    U.openSheet({
-      title: 'Nuovo portainnesto',
-      body: `<form id="rootForm">
-          <label class="field"><span>Codice portainnesto</span><input type="text" name="code" required placeholder="es. 1103 PAULSEN"></label>
-          <p class="field-error" id="rootErr" hidden></p>
-        </form>`,
-      actions: [
-        { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
-        { label: 'Salva', class: 'btn-primary', run: () => {
-          const sheet = document.querySelector('.sheet');
-          const res = S.addPortainnesto(sheet.querySelector('[name="code"]').value);
-          const err = sheet.querySelector('#rootErr');
-          if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
-          U.closeSheet(); U.toast('Portainnesto salvato'); ctx.refresh();
-        } },
-      ],
+  if (newBtn) newBtn.addEventListener('click', () => openRootForm(ctx));
+
+  root.querySelectorAll('[data-rename]').forEach((b) => {
+    b.addEventListener('click', () => openRootForm(ctx, b.dataset.rename));
+  });
+  root.querySelectorAll('[data-del-root]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const code = b.dataset.delRoot;
+      U.confirmSheet({
+        title: 'Eliminare il portainnesto?',
+        message: `${code}. Se è usato da lotti o impegni l'operazione verrà rifiutata.`,
+        confirmLabel: 'Elimina', danger: true,
+        onConfirm: () => {
+          const res = S.deletePortainnesto(code);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+          U.toast('Portainnesto eliminato');
+          ctx.refresh();
+        },
+      });
     });
+  });
+}
+
+function openRootForm(ctx, existing) {
+  let submitFn = null;
+  U.openSheet({
+    title: existing ? 'Modifica portainnesto' : 'Nuovo portainnesto',
+    body: `<form id="rootForm">
+        <label class="field"><span>Codice portainnesto</span>
+          <input type="text" name="code" required value="${existing ? U.esc(existing) : ''}"
+                 placeholder="es. 1103 PAULSEN"></label>
+        <p class="field-error" id="rootErr" hidden></p>
+      </form>`,
+    actions: [
+      { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
+      { label: 'Salva', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
+    ],
+    onMount: (sheet) => {
+      function submit() {
+        const code = sheet.querySelector('[name="code"]').value;
+        const res = existing ? S.renamePortainnesto(existing, code) : S.addPortainnesto(code);
+        const err = sheet.querySelector('#rootErr');
+        if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+        U.closeSheet();
+        U.toast(existing ? 'Portainnesto aggiornato' : 'Portainnesto salvato');
+        ctx.refresh();
+      }
+      submitFn = submit;
+      sheet.querySelector('[name="code"]').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      });
+    },
   });
 }

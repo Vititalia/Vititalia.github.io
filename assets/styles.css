@@ -142,6 +142,9 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 .badge-danger{background:var(--danger-50);color:var(--danger)}
 .badge-warn{background:var(--warn-50);color:var(--warn)}
 .badge-ok{background:var(--ok-50);color:#15803D}
+.req{font-style:normal;font-weight:700;font-size:9px;letter-spacing:.3px;text-transform:uppercase;
+  color:var(--brand-600);background:var(--brand-50);border-radius:999px;padding:1px 6px;margin-left:4px}
+.view-toggle{display:none}
 .banner code{font-family:var(--mono);font-size:12px;background:rgba(15,23,42,.07);
   padding:1px 5px;border-radius:4px;overflow-wrap:anywhere;word-break:break-word;
   box-decoration-break:clone;-webkit-box-decoration-break:clone}
@@ -447,6 +450,43 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
   .grid tbody tr.total td.metric::after,.grid tbody tr.subtotal td.metric::after{content:" "}
 
   .grid tbody tr.empty-row td{padding:20px;text-align:center;color:var(--ink-500);font-size:13px}
+}
+
+@media (max-width:759px){
+  /* segmented control: cards (default) or the same table as on the web */
+  .view-toggle{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;
+    background:var(--surface);box-shadow:var(--e1)}
+  .view-toggle .seg{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;font-size:12px;
+    font-weight:700;color:var(--ink-500);text-decoration:none}
+  .view-toggle .seg.is-on{background:var(--brand-600);color:#fff}
+
+  /* table mode: undo the card transform for this table only, and let it scroll */
+  .report.table-mode .table-scroll{overflow-x:auto;border:1px solid var(--line);
+    border-radius:var(--r-card);background:var(--surface)}
+  .report.table-mode .grid{display:table;width:100%;min-width:760px;border-collapse:collapse}
+  .report.table-mode .grid thead{display:table-header-group}
+  .report.table-mode .grid tbody{display:table-row-group}
+  .report.table-mode .grid tr.trow,.report.table-mode .grid tr.subtotal,
+  .report.table-mode .grid tr.total{display:table-row;margin:0;padding:0;border:0;border-radius:0;
+    background:inherit;box-shadow:none}
+  .report.table-mode .grid td,.report.table-mode .grid th{display:table-cell;padding:8px 10px;
+    border-bottom:1px solid var(--line);text-align:left;font-size:13px;background:none;box-shadow:none}
+  .report.table-mode .grid th.r,.report.table-mode .grid td.r{text-align:right}
+  .report.table-mode .grid td.metric{display:table-cell;padding:8px 10px;background:none;
+    font-size:13px;font-weight:400;color:var(--ink-700)}
+  .report.table-mode .grid td.metric::before,.report.table-mode .grid td[data-label]::before,
+  .report.table-mode .grid td[data-label]:not(.metric):not(.ident):not(.cell-sub)::before{content:none}
+  .report.table-mode .grid td[data-label]:not(.metric):not(.ident):not(.cell-sub){display:table-cell;
+    padding:8px 10px;font-size:13px;color:var(--ink-700)}
+  .report.table-mode .grid td.ident{display:table-cell;font-size:13px;font-weight:400;color:var(--ink-900)}
+  .report.table-mode .grid td.cell-sub{display:table-cell}
+  .report.table-mode .grid td.cell-sub .ident{display:inline;background:none;padding:0;font-size:12px;color:var(--ink-700)}
+  .report.table-mode .grid td.metric.disp{background:none;font-size:13px;font-weight:700}
+  .report.table-mode .grid tbody tr.trow.negative td{background:var(--danger-50);color:var(--danger);font-weight:700}
+  .report.table-mode .grid tbody tr.subtotal td,
+  .report.table-mode .grid tbody tr.total td{background:var(--brand-50);font-weight:700;color:var(--ink-900)}
+  .report.table-mode .grid tbody tr.group th{background:var(--brand-50);display:table-cell}
+  .report.table-mode .grid thead th{display:table-cell}
 }
 
 @media (prefers-reduced-motion:reduce){

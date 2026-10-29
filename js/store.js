@@ -14,7 +14,7 @@ export const NON_INDICATA = '(non indicata)';
 export const NON_ATTRIBUITO = 'Non attribuito';
 export const NON_RICONOSCIUTO = 'Non riconosciuto';
 
-const EDITS_KEY = 'vignero.edits.v1';
+const EDITS_KEY = 'vignero.edits.v2';
 
 export const store = {
   meta: {
@@ -22,6 +22,8 @@ export const store = {
     produzioni: ['Nuova produzione', 'Ripiantato', 'Frigoconservato'],
     produttori: ['Mori Marco', 'Donati', 'Agriserv', 'Vivai riuniti', 'Bianchi',
                  'Golferenzo', 'Lorin', 'Esterno'],
+    defaultTipologia: 'Barbatelle innestate',
+    defaultProduzione: 'Nuova produzione',
   },
   viti: [],          // [{varieta, clone}]
   portainnesti: [],  // [code]
@@ -32,17 +34,30 @@ export const store = {
 };
 
 /* ---------------------------------------------------------------- edits */
+/* Overlay persisted in the browser:
+ *   { lotti:{added,updated,removed}, ordini:{added,updated,removed},
+ *     viti:{added,removed}, portainnesti:{added,removed}, spedito:{} }        */
+const bucket = () => ({ added: [], updated: {}, removed: [] });
 function readEdits() {
-  try { return JSON.parse(localStorage.getItem(EDITS_KEY)) || {}; }
-  catch { return {}; }
+  let e = {};
+  try { e = JSON.parse(localStorage.getItem(EDITS_KEY)) || {}; } catch { e = {}; }
+  e.lotti = { ...bucket(), ...(e.lotti || {}) };
+  e.ordini = { ...bucket(), ...(e.ordini || {}) };
+  e.viti = { added: [], removed: [], ...(e.viti || {}) };
+  e.portainnesti = { added: [], removed: [], ...(e.portainnesti || {}) };
+  e.spedito = e.spedito || {};
+  return e;
 }
 function writeEdits(e) {
   try { localStorage.setItem(EDITS_KEY, JSON.stringify(e)); } catch { /* private mode */ }
 }
 export function hasLocalEdits() {
   const e = readEdits();
-  return !!(e.lotti?.length || e.ordini?.length || e.viti?.length ||
-            e.portainnesti?.length || Object.keys(e.spedito || {}).length);
+  return !!(e.lotti.added.length || Object.keys(e.lotti.updated).length || e.lotti.removed.length ||
+            e.ordini.added.length || Object.keys(e.ordini.updated).length || e.ordini.removed.length ||
+            e.viti.added.length || e.viti.removed.length ||
+            e.portainnesti.added.length || e.portainnesti.removed.length ||
+            Object.keys(e.spedito).length);
 }
 export function resetLocalEdits() {
   try { localStorage.removeItem(EDITS_KEY); } catch { /* ignore */ }
@@ -79,17 +94,31 @@ export function loadFromSnapshot(snap) {
 
 function applyEdits() {
   const e = readEdits();
-  if (e.spedito) {
-    store.ordini.forEach((o) => {
-      if (Object.prototype.hasOwnProperty.call(e.spedito, o.id)) o.spedito = !!e.spedito[o.id];
-    });
-  }
-  (e.lotti || []).forEach((l) => store.lotti.push({ ...l, local: true }));
-  (e.ordini || []).forEach((o) => store.ordini.push({ ...o, local: true }));
-  (e.viti || []).forEach((v) => {
-    if (!store.viti.some((x) => x.varieta === v.varieta && x.clone === v.clone)) store.viti.push(v);
+
+  const merge = (base, b) => {
+    let out = base
+      .filter((r) => !b.removed.includes(r.id))
+      .map((r) => (b.updated[r.id] ? { ...r, ...b.updated[r.id] } : r));
+    if (e.spedito) {
+      out = out.map((r) => (r.spedito !== undefined && Object.prototype.hasOwnProperty.call(e.spedito, r.id)
+        ? { ...r, spedito: !!e.spedito[r.id] } : r));
+    }
+    return out.concat(b.added.map((r) => ({ ...r, local: true })));
+  };
+
+  store.lotti = merge(store.lotti, e.lotti);
+  store.ordini = merge(store.ordini, e.ordini);
+
+  const removedPairs = e.viti.removed.map((v) => v.varieta + '\u0001' + v.clone);
+  store.viti = store.viti.filter((v) => !removedPairs.includes(v.varieta + '\u0001' + v.clone));
+  e.viti.added.forEach((v) => {
+    if (!store.viti.some((x) => x.varieta === v.varieta && x.clone === v.clone)) {
+      store.viti.push({ ...v, local: true });
+    }
   });
-  (e.portainnesti || []).forEach((c) => {
+
+  store.portainnesti = store.portainnesti.filter((c) => !e.portainnesti.removed.includes(c));
+  e.portainnesti.added.forEach((c) => {
     if (!store.portainnesti.includes(c)) store.portainnesti.push(c);
   });
 }
@@ -199,12 +228,25 @@ export function reportDisponibilita(filters) {
     C.compare(a.portainnesto, b.portainnesto) ||
     C.compare(a.clone, b.clone) ||
     C.compare(a.varieta, b.varieta));
+
+  // one subtotal per rootstock, rendered as a highlighted row after its rows
+  const subtotals = new Map();
+  for (const r of rows) {
+    if (!subtotals.has(r.portainnesto)) {
+      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
+                                      mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
+    }
+    const t = subtotals.get(r.portainnesto);
+    t.count += 1;
+    for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
+  }
+
   const totals = rows.reduce((t, r) => {
     for (const k of ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita']) t[k] += r[k];
     return t;
   }, zero());
   const negativeCount = rows.filter((r) => r.disponibilita < 0).length;
-  return { rows, totals, negativeCount, rowCount: rows.length };
+  return { rows, subtotals, totals, negativeCount, rowCount: rows.length };
 }
 
 /**
@@ -265,8 +307,34 @@ export function reportIndisponibilita(filters) {
     .sort((a, b) => C.compare(a.varieta, b.varieta) ||
                     C.compare(a.portainnesto, b.portainnesto) ||
                     C.compare(a.clone, b.clone));
-  const deficitTot = rows.reduce((s, r) => s + r.deficit, 0);
+  const deficitTot = rows.reduce((s2, r) => s2 + r.deficit, 0);
   return { rows, count: rows.length, deficitTot };
+}
+
+/** Report 4 — commitments still to be shipped (spedito = false). */
+export function reportDaSpedire(filters) {
+  const f = filters || {};
+  const C = collator();
+  const rows = store.ordini
+    .filter((o) => !o.spedito && passes(o, f))
+    .map((o) => {
+      const lot = o.id_magazzino ? store.index.lotById.get(o.id_magazzino) : null;
+      return {
+        id: o.id,
+        id_magazzino: o.id_magazzino,
+        lotLabel: lot ? `${lot.produttore || '—'} · ${lot.anno}` : null,
+        produttore: lot ? (lot.produttore || null) : null,
+        tipologia: o.tipologia || NON_INDICATA,
+        produzione: o.produzione || NON_INDICATA,
+        varieta: o.varieta, clone: o.clone, portainnesto: o.portainnesto,
+        quantita: o.quantita, note: o.note,
+      };
+    })
+    .sort((a, b) => C.compare(a.portainnesto, b.portainnesto) ||
+                    C.compare(a.clone, b.clone) ||
+                    C.compare(a.varieta, b.varieta));
+  const totals = { quantita: rows.reduce((s2, r) => s2 + r.quantita, 0) };
+  return { rows, totals, rowCount: rows.length };
 }
 
 /** KPI summary + recent activity for the home screen. */
@@ -348,37 +416,114 @@ export function availabilityImpact(o) {
 }
 
 /* ------------------------------------------------------------ mutations */
+const key = (v, c) => v + '\u0001' + c;
+
+/** Usage counts (referential checks before delete/rename). */
+export function usageOfPair(varieta, clone) {
+  return store.lotti.filter((l) => l.varieta === varieta && l.clone === clone).length +
+         store.ordini.filter((o) => o.varieta === varieta && o.clone === clone).length;
+}
+export function usageOfRootstock(code) {
+  return store.lotti.filter((l) => l.portainnesto === code).length +
+         store.ordini.filter((o) => o.portainnesto === code).length;
+}
+export function ordersOfLotto(id) {
+  return store.ordini.filter((o) => o.id_magazzino === id);
+}
+
+/* ---- lotti ---- */
+const lotFromForm = (v) => ({
+  anno: Number(v.anno), produttore: v.produttore, tipologia: v.tipologia,
+  produzione: v.produzione, varieta: v.varieta, clone: v.clone,
+  portainnesto: v.portainnesto, quantita: Number(v.quantita),
+  note: v.note || null,
+});
+
 export function addLotto(v) {
   const e = readEdits();
-  const lot = {
-    id: 'lot-local-' + Date.now(),
-    anno: Number(v.anno), produttore: v.produttore, tipologia: v.tipologia,
-    produzione: v.produzione, varieta: v.varieta, clone: v.clone,
-    portainnesto: v.portainnesto, quantita: Number(v.quantita),
-    note: v.note || null, local: true,
-  };
-  (e.lotti = e.lotti || []).push(lot);
+  const lot = { id: 'lot-local-' + Date.now(), ...lotFromForm(v), local: true };
+  e.lotti.added.push(lot);
   writeEdits(e);
   store.lotti.push(lot);
   rebuild();
   return lot;
 }
 
+export function updateLotto(id, v) {
+  const e = readEdits();
+  const patch = lotFromForm(v);
+  const added = e.lotti.added.find((r) => r.id === id);
+  if (added) Object.assign(added, patch);
+  else e.lotti.updated[id] = { ...(e.lotti.updated[id] || {}), ...patch };
+  writeEdits(e);
+  const row = store.lotti.find((r) => r.id === id);
+  if (row) Object.assign(row, patch);
+  rebuild();
+  return row;
+}
+
+/** Deleting a lot that an order points at would orphan that order. */
+export function deleteLotto(id) {
+  const refs = ordersOfLotto(id);
+  if (refs.length) {
+    return { ok: false, error: `Impossibile eliminare: ${refs.length} impegno/i puntano a questo lotto.` };
+  }
+  const e = readEdits();
+  const i = e.lotti.added.findIndex((r) => r.id === id);
+  if (i >= 0) e.lotti.added.splice(i, 1);
+  else { delete e.lotti.updated[id]; e.lotti.removed.push(id); }
+  writeEdits(e);
+  store.lotti = store.lotti.filter((r) => r.id !== id);
+  rebuild();
+  return { ok: true };
+}
+
+/* ---- ordini ---- */
+const ordineFromForm = (v) => ({
+  id_magazzino: v.id_magazzino || null,
+  tipologia: v.tipologia, produzione: v.produzione, varieta: v.varieta,
+  clone: v.clone, portainnesto: v.portainnesto,
+  quantita: Number(v.quantita), note: v.note || null,
+});
+
 export function addOrdine(v) {
   const e = readEdits();
   const ord = {
-    id: 'ord-local-' + Date.now(),
-    id_magazzino: v.id_magazzino || null,
-    tipologia: v.tipologia, produzione: v.produzione, varieta: v.varieta,
-    clone: v.clone, portainnesto: v.portainnesto,
-    quantita: Number(v.quantita), spedito: !!v.spedito, note: v.note || null,
-    local: true,
+    id: 'ord-local-' + Date.now(), ...ordineFromForm(v),
+    spedito: !!v.spedito, local: true,
   };
-  (e.ordini = e.ordini || []).push(ord);
+  e.ordini.added.push(ord);
   writeEdits(e);
   store.ordini.push(ord);
   rebuild();
   return ord;
+}
+
+export function updateOrdine(id, v) {
+  const e = readEdits();
+  const patch = { ...ordineFromForm(v) };
+  if (v.spedito !== undefined) patch.spedito = !!v.spedito;
+  const added = e.ordini.added.find((r) => r.id === id);
+  if (added) Object.assign(added, patch);
+  else e.ordini.updated[id] = { ...(e.ordini.updated[id] || {}), ...patch };
+  delete e.spedito[id];
+  writeEdits(e);
+  const row = store.ordini.find((r) => r.id === id);
+  if (row) Object.assign(row, patch);
+  rebuild();
+  return row;
+}
+
+export function deleteOrdine(id) {
+  const e = readEdits();
+  const i = e.ordini.added.findIndex((r) => r.id === id);
+  if (i >= 0) e.ordini.added.splice(i, 1);
+  else { delete e.ordini.updated[id]; e.ordini.removed.push(id); }
+  delete e.spedito[id];
+  writeEdits(e);
+  store.ordini = store.ordini.filter((r) => r.id !== id);
+  rebuild();
+  return { ok: true };
 }
 
 export function toggleSpedito(id, value) {
@@ -387,49 +532,114 @@ export function toggleSpedito(id, value) {
   const prev = o.spedito;
   o.spedito = typeof value === 'boolean' ? value : !o.spedito;
   const e = readEdits();
-  e.spedito = e.spedito || {};
-  e.spedito[id] = o.spedito;
+  const added = e.ordini.added.find((r) => r.id === id);
+  if (added) added.spedito = o.spedito;
+  else e.spedito[id] = o.spedito;
   writeEdits(e);
   return { ordine: o, prev };
 }
 
+/* ---- anagrafica vite (una riga = coppia varietà+clone) ---- */
 export function addVitiPair(varieta, clone) {
-  const v = varieta.trim(), c = clone.trim();
+  const v = String(varieta || '').trim(), c = String(clone || '').trim();
   if (!v || !c) return { ok: false, error: 'Varietà e clone sono obbligatori.' };
-  if (store.viti.some((x) => x.varieta.toLowerCase() === v.toLowerCase() &&
-                             x.clone.toLowerCase() === c.toLowerCase())) {
+  if (store.viti.some((x) => key(x.varieta.toLowerCase(), x.clone.toLowerCase()) === key(v.toLowerCase(), c.toLowerCase()))) {
     return { ok: false, error: 'La coppia varietà/clone esiste già.' };
   }
   const e = readEdits();
-  (e.viti = e.viti || []).push({ varieta: v, clone: c });
+  e.viti.added.push({ varieta: v, clone: c });
   writeEdits(e);
   store.viti.push({ varieta: v, clone: c });
+  rebuild();
+  return { ok: true, pair: { varieta: v, clone: c } };
+}
+
+export function updateVitiPair(from, to) {
+  const v = String(to.varieta || '').trim(), c = String(to.clone || '').trim();
+  if (!v || !c) return { ok: false, error: 'Varietà e clone sono obbligatori.' };
+  const used = usageOfPair(from.varieta, from.clone);
+  if (used) {
+    return { ok: false, error: `Non modificabile: ${used} record usano questa coppia.` };
+  }
+  const dup = store.viti.find((x) =>
+    key(x.varieta.toLowerCase(), x.clone.toLowerCase()) === key(v.toLowerCase(), c.toLowerCase()) &&
+    !(x.varieta === from.varieta && x.clone === from.clone));
+  if (dup) return { ok: false, error: 'Esiste già una coppia con questi codici.' };
+  const e = readEdits();
+  const i = e.viti.added.findIndex((x) => x.varieta === from.varieta && x.clone === from.clone);
+  if (i >= 0) e.viti.added[i] = { varieta: v, clone: c };
+  else {
+    e.viti.removed.push({ varieta: from.varieta, clone: from.clone });
+    e.viti.added.push({ varieta: v, clone: c });
+  }
+  writeEdits(e);
+  const row = store.viti.find((x) => x.varieta === from.varieta && x.clone === from.clone);
+  if (row) { row.varieta = v; row.clone = c; }
+  rebuild();
+  return { ok: true, pair: { varieta: v, clone: c } };
+}
+
+export function deleteVitiPair(varieta, clone) {
+  const used = usageOfPair(varieta, clone);
+  if (used) return { ok: false, error: `Impossibile eliminare: ${used} record usano questa coppia.` };
+  const e = readEdits();
+  const i = e.viti.added.findIndex((x) => x.varieta === varieta && x.clone === clone);
+  if (i >= 0) e.viti.added.splice(i, 1);
+  else e.viti.removed.push({ varieta, clone });
+  writeEdits(e);
+  store.viti = store.viti.filter((x) => !(x.varieta === varieta && x.clone === clone));
   rebuild();
   return { ok: true };
 }
 
+/* ---- anagrafica portainnesto ---- */
 export function addPortainnesto(code) {
-  const c = code.trim();
+  const c = String(code || '').trim();
   if (!c) return { ok: false, error: 'Il codice è obbligatorio.' };
   if (store.portainnesti.some((x) => x.toLowerCase() === c.toLowerCase())) {
     return { ok: false, error: 'Il portainnesto esiste già.' };
   }
   const e = readEdits();
-  (e.portainnesti = e.portainnesti || []).push(c);
+  e.portainnesti.added.push(c);
   writeEdits(e);
   store.portainnesti.push(c);
   rebuild();
-  return { ok: true };
+  return { ok: true, code: c };
 }
 
-/** Usage count for a variety/clone pair or a rootstock (referential check). */
-export function usageOfPair(varieta, clone) {
-  return store.lotti.filter((l) => l.varieta === varieta && l.clone === clone).length +
-         store.ordini.filter((o) => o.varieta === varieta && o.clone === clone).length;
+export function renamePortainnesto(from, to) {
+  const c = String(to || '').trim();
+  if (!c) return { ok: false, error: 'Il codice è obbligatorio.' };
+  const used = usageOfRootstock(from);
+  if (used) return { ok: false, error: `Non modificabile: ${used} record usano questo portainnesto.` };
+  if (store.portainnesti.some((x) => x.toLowerCase() === c.toLowerCase() && x !== from)) {
+    return { ok: false, error: 'Esiste già un portainnesto con questo codice.' };
+  }
+  const e = readEdits();
+  const i = e.portainnesti.added.indexOf(from);
+  if (i >= 0) e.portainnesti.added[i] = c;
+  else {
+    e.portainnesti.removed.push(from);
+    e.portainnesti.added.push(c);
+  }
+  writeEdits(e);
+  const j = store.portainnesti.indexOf(from);
+  if (j >= 0) store.portainnesti[j] = c; else store.portainnesti.push(c);
+  rebuild();
+  return { ok: true, code: c };
 }
-export function usageOfRootstock(code) {
-  return store.lotti.filter((l) => l.portainnesto === code).length +
-         store.ordini.filter((o) => o.portainnesto === code).length;
+
+export function deletePortainnesto(code) {
+  const used = usageOfRootstock(code);
+  if (used) return { ok: false, error: `Impossibile eliminare: ${used} record usano questo portainnesto.` };
+  const e = readEdits();
+  const i = e.portainnesti.added.indexOf(code);
+  if (i >= 0) e.portainnesti.added.splice(i, 1);
+  else e.portainnesti.removed.push(code);
+  writeEdits(e);
+  store.portainnesti = store.portainnesti.filter((x) => x !== code);
+  rebuild();
+  return { ok: true };
 }
 
 /* ------------------------------------------------------------- CSV out */

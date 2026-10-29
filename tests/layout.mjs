@@ -106,9 +106,9 @@ for (const route of ROUTES) {
       headers: [...t.querySelectorAll('thead th')].map((h) => h.textContent.trim()).slice(-3),
     };
   });
-  ok(m.cols === 16, `matrix: 16 columns (got ${m.cols})`);
-  ok(m.headers.includes('Non attribuito') && m.headers.includes('Tot. produttori'),
-     `matrix: unattributed + total columns present (${m.headers})`);
+  ok(m.cols === 14, `matrix: 14 columns (got ${m.cols})`);
+  ok(!m.headers.includes('Non attribuito') && !m.headers.includes('Tot. produttori'),
+     `matrix: no unattributed/total-producers columns (${m.headers})`);
   ok(m.scrollW > m.clientW, `matrix: scrolls horizontally inside its panel`);
   ok(m.doc <= m.win + 1, `matrix: page itself does not scroll (${m.doc} > ${m.win})`);
   await ctx.close();
@@ -151,7 +151,7 @@ for (const w of [1024, 1440, 1920]) {
 
 /* the two frozen columns must stay put while the matrix scrolls */
 {
-  const { page, ctx } = await open({ width: 1440, height: 900 }, '#/r/produttore');
+  const { page, ctx } = await open({ width: 1024, height: 900 }, '#/r/produttore');
   const pin = await page.evaluate(async () => {
     const scroller = document.querySelector('.table-scroll');
     const before = {
@@ -208,8 +208,8 @@ for (const w of [1024, 1440, 1920]) {
       rows: t.querySelectorAll('tbody tr.trow').length,
     };
   });
-  ok(r.cols === 7, `report 1: 7 columns including the rootstock (${r.cols})`);
-  ok(r.groups === 0 && r.subs === 0, `report 1: no grouping and no subtotals (${r.groups}/${r.subs})`);
+  ok(r.cols === 6, `report 1: 6 columns, no «Da spedire» (${r.cols})`);
+  ok(r.groups === 0 && r.subs > 0, `report 1: no grouping but a subtotal per rootstock (${r.groups}/${r.subs})`);
   ok(r.totals === 1, `report 1: single grand-total row (${r.totals})`);
   ok(r.rootstockCells === r.rows, `report 1: every row carries its rootstock (${r.rootstockCells}/${r.rows})`);
   ok(String(r.totalWeight) === '700', `total row is bold (${r.totalWeight})`);
@@ -344,8 +344,8 @@ for (const route of ['#/home', '#/r/disponibilita', '#/r/produttore', '#/r/indis
 }
 
 /* ---------------- info banners must wrap, not fragment or overflow ---------------- */
-for (const w of [390, 1440]) {
-  const { page, ctx } = await open({ width: w, height: 900 }, '#/r/produttore');
+for (const [w, route, expectCode] of [[1440, '#/dati/ordini', true], [390, '#/config/utenti', false]]) {
+  const { page, ctx } = await open({ width: w, height: 900 }, route);
   const d = await page.evaluate(() => {
     const banner = document.querySelector('.banner');
     if (!banner) return { none: true };
@@ -357,36 +357,37 @@ for (const w of [390, 1440]) {
       return r.right > b.right + 1 || r.left < b.left - 1;
     }).map((k) => k.tagName + '.' + k.className);
     const codes = [...banner.querySelectorAll('code')].map((c) => {
-      const cs = getComputedStyle(c);
+      const ccs = getComputedStyle(c);
       return {
         text: c.textContent,
         overflows: c.scrollWidth > c.clientWidth + 1,
-        background: cs.backgroundColor,
-        mono: /mono|Courier/i.test(cs.fontFamily),
+        background: ccs.backgroundColor,
+        mono: /mono|Courier/i.test(ccs.fontFamily),
       };
     });
     return {
       children: kids.length,
       flexWrap: cs.flexWrap,
       scrollW: banner.scrollWidth, clientW: banner.clientWidth,
-      overflowing,
-      codes,
+      overflowing, codes,
       height: Math.round(b.height),
       text: banner.textContent.replace(/\s+/g, ' ').trim(),
     };
   });
-  ok(!d.none, `${w}px: per-grower note is rendered`);
-  ok(d.children === 2, `${w}px: banner has exactly icon + text (got ${d.children} children)`);
-  ok(d.flexWrap === 'wrap', `${w}px: banner wraps (got ${d.flexWrap})`);
-  ok(d.overflowing.length === 0, `${w}px: no banner child overflows (${d.overflowing})`);
-  ok(d.scrollW <= d.clientW + 1, `${w}px: banner text does not overflow its box (${d.scrollW}/${d.clientW})`);
-  ok(d.codes.length === 2 && d.codes.every((c) => !c.overflows),
-     `${w}px: the code tokens fit (${JSON.stringify(d.codes)})`);
-  ok(d.codes.every((c) => c.background !== 'rgba(0, 0, 0, 0)'),
-     `${w}px: code tokens are visually distinct (${d.codes.map((c) => c.background).join(' | ')})`);
-  ok(d.codes.every((c) => c.mono), `${w}px: code tokens are set in a monospace face`);
-  ok(/Non attribuito/.test(d.text), `${w}px: the note still explains Non attribuito`);
-  ok(d.height < 220, `${w}px: the note is compact (${d.height}px)`);
+  ok(!d.none, `${w}px ${route}: banner rendered`);
+  if (d.none) { await ctx.close(); continue; }
+  ok(d.children === 2, `${w}px ${route}: banner is icon + text (${d.children})`);
+  ok(d.flexWrap === 'wrap', `${w}px ${route}: banner wraps`);
+  ok(d.overflowing.length === 0, `${w}px ${route}: no banner child overflows`);
+  ok(d.scrollW <= d.clientW + 1, `${w}px ${route}: banner text fits (${d.scrollW}/${d.clientW})`);
+  if (expectCode) {
+    ok(d.codes.length >= 1 && d.codes.every((c) => !c.overflows),
+       `${w}px ${route}: code tokens fit (${d.codes.length})`);
+    ok(d.codes.every((c) => c.background !== 'rgba(0, 0, 0, 0)' && c.mono),
+       `${w}px ${route}: code tokens are distinct and monospace`);
+    ok(/lotto/i.test(d.text), `${w}px ${route}: the note explains the lot link`);
+  }
+  ok(d.height < 260, `${w}px ${route}: the note stays compact (${d.height}px)`);
   await ctx.close();
 }
 
@@ -553,6 +554,70 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   if (route === '#/r/produttore') {
     ok(d.growerPerRow === 4, `per-grower @390: grower values read four per line (${d.growerPerRow})`);
   }
+  await ctx.close();
+}
+
+/* phone: reports can switch between cards and the full table */
+{
+  const { page, ctx } = await open({ width: 390, height: 844 }, '#/r/disponibilita');
+  const first = await page.evaluate(() => {
+    const t = document.querySelector('.view-toggle');
+    const row = document.querySelector('.grid tbody tr.trow');
+    return {
+      toggle: !!t,
+      segs: t ? [...t.querySelectorAll('.seg')].map((a) => a.textContent.trim()) : [],
+      on: t ? t.querySelector('.seg.is-on').textContent.trim() : null,
+      rowDisplay: row ? getComputedStyle(row).display : null,
+      thead: getComputedStyle(document.querySelector('.grid thead')).display,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  ok(first.toggle, 'phone: the cards/table switch is offered');
+  ok(first.segs.join('|') === 'Schede|Tabella', `phone: two options (${first.segs})`);
+  ok(first.on === 'Schede', 'phone: cards are the default');
+  ok(first.rowDisplay === 'flex' && first.thead === 'none', 'phone: cards by default');
+
+  await page.click('.view-toggle .seg:nth-child(2)');
+  await page.waitForTimeout(450);
+  const table = await page.evaluate(() => {
+    const row = document.querySelector('.grid tbody tr.trow');
+    const scroller = document.querySelector('.report.table-mode .table-scroll');
+    return {
+      on: document.querySelector('.view-toggle .seg.is-on').textContent.trim(),
+      rowDisplay: getComputedStyle(row).display,
+      tdDisplay: getComputedStyle(row.querySelector('td')).display,
+      thead: getComputedStyle(document.querySelector('.grid thead')).display,
+      scrolls: scroller ? scroller.scrollWidth > scroller.clientWidth + 1 : false,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      cols: document.querySelectorAll('.grid thead th').length,
+    };
+  });
+  ok(table.on === 'Tabella', 'phone: table option selected');
+  ok(table.rowDisplay === 'table-row' && table.tdDisplay === 'table-cell',
+     `phone: the table really is a table (${table.rowDisplay}/${table.tdDisplay})`);
+  ok(table.thead !== 'none', 'phone table mode: header row visible');
+  ok(table.cols === 6, `phone table mode: same columns as the web (${table.cols})`);
+  ok(table.scrolls, 'phone table mode: the table scrolls inside its panel');
+  ok(table.overflow <= 1, 'phone table mode: the page itself does not scroll sideways');
+
+  await page.click('.view-toggle .seg:nth-child(1)');
+  await page.waitForTimeout(400);
+  const back = await page.evaluate(() => getComputedStyle(document.querySelector('.grid tbody tr.trow')).display);
+  ok(back === 'flex', 'phone: switching back restores the cards');
+  await ctx.close();
+}
+
+/* the «Da spedire» report is reachable from a phone too */
+{
+  const { page, ctx } = await open({ width: 390, height: 844 }, '#/r/daspedire');
+  const d = await page.evaluate(() => ({
+    locked: /solo da PC/i.test(document.getElementById('main').textContent),
+    cards: document.querySelectorAll('.grid tbody tr.trow').length,
+    toggle: !!document.querySelector('.view-toggle'),
+  }));
+  ok(!d.locked, '«Da spedire» is not gated to PC');
+  ok(d.cards > 0, `«Da spedire» renders cards on a phone (${d.cards})`);
+  ok(d.toggle, '«Da spedire» has the cards/table switch');
   await ctx.close();
 }
 

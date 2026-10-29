@@ -3,7 +3,31 @@ import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
 import * as A from './auth.js';
-import { filterBar, parseFilters, serializeFilters, activeChips } from './filters.js';
+import { filterBar, parseFilters, serializeFilters, activeChips, mandatoryDefaults } from './filters.js';
+
+/* ---------- report view mode: cards (phone default) or table ---------- */
+const VIEW_KEY = 'vignero.reportView.v1';
+export function wantsTableView(ctx) {
+  const v = ctx.params ? ctx.params.get('view') : null;
+  if (v === 'table') { try { localStorage.setItem(VIEW_KEY, 'table'); } catch { /* ignore */ } return true; }
+  if (v === 'cards') { try { localStorage.setItem(VIEW_KEY, 'cards'); } catch { /* ignore */ } return false; }
+  try { return localStorage.getItem(VIEW_KEY) === 'table'; } catch { return false; }
+}
+export function resetViewPreference() {
+  try { localStorage.removeItem(VIEW_KEY); } catch { /* ignore */ }
+}
+function viewToggle(ctx, table) {
+  const base = ctx.params || new URLSearchParams();
+  const href = (mode) => {
+    const p = new URLSearchParams(base);
+    p.set('view', mode);
+    return '#' + ctx.path + '?' + p.toString();
+  };
+  return `<div class="view-toggle" role="group" aria-label="Formato della tabella">
+      <a class="seg${table ? '' : ' is-on'}" href="${href('cards')}" aria-pressed="${!table}">Schede</a>
+      <a class="seg${table ? ' is-on' : ''}" href="${href('table')}" aria-pressed="${table}">Tabella</a>
+    </div>`;
+}
 
 /* ------------------------------------------------------------- S-01 login */
 export function viewLogin(root, ctx) {
@@ -107,6 +131,8 @@ function launcherGroups(s, role, isPC) {
         title: 'Per produttore', sub: 'Le colonne dei soci' },
       { cap: 'r.indisponibilita', href: '#/r/indisponibilita', icon: 'alert',
         title: 'Indisponibilità', sub: 'Solo i deficit', badge: s.negativeCount, badgeTone: 'danger' },
+      { cap: 'r.daspedire', href: '#/r/daspedire', icon: 'truck',
+        title: 'Da spedire', sub: 'Impegni da evadere', badge: s.ordiniNonSpediti },
     ] },
     { title: 'Dati', items: [
       { cap: 'dati.lotti', href: '#/dati/lotti', icon: 'edit',
@@ -123,6 +149,8 @@ function launcherGroups(s, role, isPC) {
         title: 'Portainnesti', sub: 'Codici di innesto' },
     ] },
     { title: 'Sistema', items: [
+      { cap: 'config.utenti', href: '#/config/utenti', icon: 'users',
+        title: 'Utenti', sub: 'Inviti, ruoli, accessi' },
       { cap: 'config.permessi', href: '#/config/permessi', icon: 'lock',
         title: 'Ruoli e permessi', sub: 'Chi vede cosa' },
       { cap: 'profilo', href: '#/profilo', icon: 'user',
@@ -144,6 +172,11 @@ export function viewHome(root, ctx) {
   const neg = s.negativeCount;
   const groups = launcherGroups(s, ctx.role, isPC);
   const tileCount = groups.reduce((n, g) => n + g.items.length, 0);
+  const showProducer = P.can(ctx.role, 'home.lots.producer');
+  const showNegKpi = P.can(ctx.role, 'home.kpi.indisponibilita');
+  const showShipKpi = P.can(ctx.role, 'home.kpi.daspedire');
+  const canSeeNeg = P.can(ctx.role, 'r.indisponibilita');
+  const canSeeShip = P.can(ctx.role, 'r.daspedire');
 
   root.innerHTML = `
     <div class="page-head"><div>
@@ -159,22 +192,24 @@ export function viewHome(root, ctx) {
         <span class="k-value">${U.fmtSigned(s.disponibilita)}</span>
         <span class="k-sub">giacenza ${U.fmtQty(s.giacenza)}</span>
       </button>
+      ${showNegKpi ? `
       <button class="kpi ${neg ? 'tone-danger' : 'tone-ok'}" type="button"
-              ${P.can(ctx.role, 'r.indisponibilita') ? 'data-go="#/r/indisponibilita"' : 'data-go="#/r/disponibilita"'}>
+              data-go="${canSeeNeg ? '#/r/indisponibilita' : '#/r/disponibilita'}">
         <span class="k-label">In indisponibilità</span>
         <span class="k-value">${neg}</span>
         <span class="k-sub">${neg ? 'combinazioni in deficit' : 'nessun deficit'}</span>
-      </button>
+      </button>` : ''}
       <button class="kpi hide-sm" type="button" ${P.can(ctx.role, 'dati.lotti') ? 'data-go="#/dati/lotti"' : 'data-go="#/r/disponibilita"'}>
         <span class="k-label">Lotti registrati</span>
         <span class="k-value">${U.fmtQty(s.lotti)}</span>
         <span class="k-sub">anno di conferimento</span>
       </button>
-      <button class="kpi hide-sm" type="button" ${P.can(ctx.role, 'dati.ordini') ? 'data-go="#/dati/ordini"' : 'data-go="#/r/disponibilita"'}>
+      ${showShipKpi ? `
+      <button class="kpi hide-sm" type="button" data-go="${canSeeShip ? '#/r/daspedire' : '#/dati/ordini'}">
         <span class="k-label">Da spedire</span>
         <span class="k-value">${U.fmtQty(s.daSpedire)}</span>
         <span class="k-sub">${s.ordiniNonSpediti} impegni aperti</span>
-      </button>
+      </button>` : ''}
     </div>
 
     <nav class="launcher" aria-label="Sezioni dell'applicazione">
@@ -203,20 +238,22 @@ export function viewHome(root, ctx) {
           </div>
         </div>
         ${U.buildTable({
-          cols: [{ label: 'Anno' }, { label: 'Produttore' }, { label: 'Varietà / clone' }, { label: 'Quantità', align: 'r' }],
+          cols: [{ label: 'Anno' }, ...(showProducer ? [{ label: 'Produttore' }] : []),
+                 { label: 'Varietà / clone' }, { label: 'Quantità', align: 'r' }],
           rows: s.ultimiLotti.length ? s.ultimiLotti.map((l) => ({
             type: 'row',
             cells: [
               { html: U.esc(l.anno), label: 'Anno' },
-              { html: U.esc(l.produttore || '—'), label: 'Produttore' },
+              ...(showProducer ? [{ html: U.esc(l.produttore || '—'), label: 'Produttore' }] : []),
               { html: `${U.esc(l.clone)}<small>${U.esc(l.varieta)} · ${U.esc(l.portainnesto)}</small>`, label: 'Varietà / clone', cls: 'ident' },
               U.metric('Quantità', U.fmtQty(l.quantita)),
             ],
           })) : [{ type: 'empty', cells: [{ html: 'Nessun lotto registrato.' }] }],
         })}
+        ${showProducer ? '' : '<p class="card-pad caption">Il dettaglio dei produttori non è disponibile per questo profilo.</p>'}
       </section>
 
-      ${P.can(ctx.role, 'r.indisponibilita') ? `
+      ${canSeeNeg ? `
       <section class="card">
         <div class="card-pad" style="border-bottom:1px solid var(--line)">
           <div class="row-between">
@@ -232,6 +269,17 @@ export function viewHome(root, ctx) {
               <b class="num" style="color:var(--danger)">\u2212${U.fmtQty(r.deficit)}</b>
             </li>`).join('')}
         </ul>` : `<p class="card-pad caption">Nessuna indisponibilità: magazzino ≥ ordinato su tutte le combinazioni.</p>`}
+      </section>` : ''}
+
+      ${canSeeShip ? `
+      <section class="card">
+        <div class="card-pad" style="border-bottom:1px solid var(--line)">
+          <div class="row-between">
+            <h2 class="eyebrow">Da spedire</h2>
+            <a class="link" href="#/r/daspedire" style="font-size:12px">Apri ›</a>
+          </div>
+        </div>
+        <p class="card-pad caption">${s.ordiniNonSpediti} impegni ancora da spedire, ${U.fmtQty(s.daSpedire)} pezzi.</p>
       </section>` : `
       <section class="card card-pad">
         <p class="caption">Profilo ${U.esc(P.roleLabel(ctx.role))}: consultazione. L'inserimento dati è riservato ad Amministratore e Amministrazione, da PC.</p>
@@ -261,23 +309,29 @@ function reportShell(root, { eyebrow, title, sub, actions = '' }) {
 
 /* ----------------------------------------------- S-04/S-05 disponibilità */
 export function viewDisponibilita(root, ctx) {
-  const f = parseFilters(ctx.params);
+  const f = parseFilters(ctx.params, { mandatory: true });
   const r = S.reportDisponibilita(f);
-  const stamp = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const table = wantsTableView(ctx);
   reportShell(root, {
     eyebrow: 'Riepiloghi / Disponibilità',
     title: 'Riepilogo disponibilità',
-    sub: `${r.rowCount} combinazioni · ${r.negativeCount} in negativo · aggiornato ${stamp}`,
-    actions: `<button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
+    sub: `${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo`,
+    actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
   });
-
   filterBar(root.querySelector('#filterHost'), f,
     (next) => ctx.navigate('#/r/disponibilita' + serializeFilters(next)),
-    { showPortainnesto: true });
+    { showPortainnesto: true, mandatory: ['tipologia', 'produzione'] });
 
-  const rows = r.rows.map((row) => {
+  const rows = [];
+  let prevRoot = null;
+  for (const row of r.rows) {
+    if (prevRoot !== null && row.portainnesto !== prevRoot) {
+      rows.push(subtotalRow(r.subtotals.get(prevRoot)));
+    }
+    prevRoot = row.portainnesto;
     const neg = row.disponibilita < 0;
-    return {
+    rows.push({
       type: 'row',
       cls: neg ? 'trow negative' : 'trow',
       cells: [
@@ -286,21 +340,20 @@ export function viewDisponibilita(root, ctx) {
         U.metric('Magazzino', U.fmtQty(row.mag)),
         U.metric('Ordinato', U.fmtQty(row.ord)),
         U.metric('Di cui spedito', U.fmtQty(row.sped)),
-        U.metric('Da spedire', U.fmtQty(row.daSpedire)),
         U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
       ],
-    };
-  });
+    });
+  }
+  if (prevRoot !== null) rows.push(subtotalRow(r.subtotals.get(prevRoot)));
   if (r.rows.length) {
     rows.push({
       type: 'total',
       cells: [
         { html: 'Totale generale', cls: 'ident' },
-        { html: '', label: 'Portainnesto' },
+        { html: '', label: 'Portainnesto', cls: 'cell-sub' },
         { html: U.fmtQty(r.totals.mag), cls: 'r metric', label: 'Magazzino' },
         { html: U.fmtQty(r.totals.ord), cls: 'r metric', label: 'Ordinato' },
         { html: U.fmtQty(r.totals.sped), cls: 'r metric', label: 'Di cui spedito' },
-        { html: U.fmtQty(r.totals.daSpedire), cls: 'r metric', label: 'Da spedire' },
         { html: `<span class="${r.totals.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(r.totals.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
       ],
     });
@@ -310,48 +363,77 @@ export function viewDisponibilita(root, ctx) {
   if (!r.rows.length) {
     host.innerHTML = U.emptyState({
       icon: '◇', title: 'Nessun dato con i filtri selezionati',
-      text: 'Rimuovi i filtri per vedere tutte le combinazioni.', action: 'Rimuovi filtri',
+      text: 'Prova un\'altra varietà o portainnesto.', action: 'Rimuovi i filtri facoltativi',
     });
     host.querySelector('[data-empty-action]').addEventListener('click',
       () => ctx.navigate('#/r/disponibilita'));
   } else {
-    host.innerHTML = `<div class="report">${U.buildTable({
+    host.innerHTML = `<div class="report${table ? ' table-mode' : ''}">${U.buildTable({
+      scroll: table,
       caption: {
-        wide: 'Un rigo per combinazione varietà/clone/portainnesto, ordinato per codice portainnesto e clone. Rosso = disponibilità negativa.',
-        narrow: 'Un rigo per clone, ordinato per portainnesto. Rosso = disponibilità negativa.',
+        wide: 'Un rigo per combinazione, con il totale per portainnesto in evidenza. Rosso = disponibilità negativa.',
+        narrow: 'Un rigo per clone, con il totale per portainnesto in evidenza.',
       },
       cols: [{ label: 'Codice clone' }, { label: 'Codice portainnesto' }, { label: 'Magazzino', align: 'r' },
              { label: 'Ordinato', align: 'r' }, { label: 'Di cui spedito', align: 'r' },
-             { label: 'Da spedire', align: 'r' }, { label: 'Disponibilità', align: 'r' }],
+             { label: 'Disponibilità', align: 'r' }],
       rows,
     })}</div>`;
   }
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
-    const out = r.rows.map((row) => [row.clone, row.varieta, row.portainnesto,
-      row.mag, row.ord, row.sped, row.daSpedire, row.disponibilita]);
-    out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped,
-              r.totals.daSpedire, r.totals.disponibilita]);
+    const out = [];
+    let prev = null;
+    for (const row of r.rows) {
+      if (prev !== null && row.portainnesto !== prev) {
+        const t = r.subtotals.get(prev);
+        out.push(['Totale per portainnesto', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
+      }
+      prev = row.portainnesto;
+      out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped, row.disponibilita]);
+    }
+    if (prev !== null) {
+      const t = r.subtotals.get(prev);
+      out.push(['Totale per portainnesto', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
+    }
+    out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita]);
     U.exportCSV(`disponibilita_${U.nowStamp()}.csv`,
       ['Codice clone', 'Codice varietà', 'Codice portainnesto', 'Magazzino', 'Ordinato',
-       'Di cui spedito', 'Da spedire', 'Disponibilità'], out);
+       'Di cui spedito', 'Disponibilità'], out);
   });
+}
+
+function subtotalRow(t) {
+  return {
+    type: 'subtotal',
+    cells: [
+      { html: 'Totale per portainnesto', cls: 'ident' },
+      { html: `<span class="ident">${U.esc(t.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+      { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Magazzino' },
+      { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
+      { html: U.fmtQty(t.sped), cls: 'r metric', label: 'Di cui spedito' },
+      { html: `<span class="${t.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(t.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
+    ],
+  };
 }
 
 /* ------------------------------------------- S-06/S-07 per produttore */
 export function viewPerProduttore(root, ctx) {
-  const f = parseFilters(ctx.params);
+  const f = parseFilters(ctx.params, { mandatory: true });
   const r = S.reportPerProduttore(f);
-  const stamp = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const table = wantsTableView(ctx);
+  const unattributed = r.rows.filter((row) => row.nonAttr !== 0).length;
+
   reportShell(root, {
     eyebrow: 'Riepiloghi / Per produttore',
     title: 'Riepilogo per produttore',
-    sub: `${r.rowCount} combinazioni · ${r.growers.length} produttori + non attribuito · ${r.negativeCount} con valori negativi · aggiornato ${stamp}`,
-    actions: `<button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
+    sub: `${r.rowCount} combinazioni · ${r.growers.length} produttori · ${r.negativeCount} con valori negativi`,
+    actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
   });
   filterBar(root.querySelector('#filterHost'), f,
     (next) => ctx.navigate('#/r/produttore' + serializeFilters(next)),
-    { showPortainnesto: true, showProduttore: true });
+    { showPortainnesto: true, showProduttore: true, mandatory: ['tipologia', 'produzione'] });
 
   const hl = (g) => (f.produttore && g === f.produttore ? ' grower-hl' : '');
   const cols = [
@@ -359,47 +441,38 @@ export function viewPerProduttore(root, ctx) {
     { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
     { label: 'Di cui spedito', align: 'r' }, { label: 'Disponibilità', align: 'r' },
     ...r.growers.map((g) => ({ label: g, align: 'r', cls: hl(g).trim() })),
-    { label: 'Non attribuito', align: 'r' }, { label: 'Tot. produttori', align: 'r' },
   ];
 
   const rows = r.rows.map((row) => {
     const neg = row.disponibilita < 0;
-    return {
-      type: 'row',
-      cls: neg ? 'trow negative' : 'trow',
-      cells: [
-        { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
-        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
-        U.metric('Magazzino', U.fmtQty(row.mag)),
-        U.metric('Ordinato', U.fmtQty(row.ord)),
-        U.metric('Di cui spedito', U.fmtQty(row.sped)),
-        U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
-        ...r.growers.map((g) => U.metric(g, U.fmtSigned(row.per[g]), { negative: row.per[g] < 0, cls: 'grower' })),
-        U.metric('Non attribuito', U.fmtSigned(row.nonAttr), { negative: row.nonAttr < 0 }),
-        U.metric('Tot. produttori', U.fmtSigned(row.totaleProduttori), { negative: row.totaleProduttori < 0 }),
-      ].map((c, i) => {
-        // highlight the selected grower's column (cells 6..6+8-1)
-        const gIdx = i - 6;
-        if (f.produttore && gIdx >= 0 && gIdx < r.growers.length && r.growers[gIdx] === f.produttore) {
-          return { ...c, cls: ((c.cls || '') + ' grower-hl').trim() };
-        }
-        return c;
-      }),
-    };
+    const cells = [
+      { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+      { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+      U.metric('Magazzino', U.fmtQty(row.mag)),
+      U.metric('Ordinato', U.fmtQty(row.ord)),
+      U.metric('Di cui spedito', U.fmtQty(row.sped)),
+      U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
+      ...r.growers.map((g) => U.metric(g, U.fmtSigned(row.per[g]), { negative: row.per[g] < 0, cls: 'grower' })),
+    ].map((c, i) => {
+      const gIdx = i - 6;
+      if (f.produttore && gIdx >= 0 && gIdx < r.growers.length && r.growers[gIdx] === f.produttore) {
+        return { ...c, cls: ((c.cls || '') + ' grower-hl').trim() };
+      }
+      return c;
+    });
+    return { type: 'row', cls: neg ? 'trow negative' : 'trow', cells };
   });
   if (r.rows.length) {
     rows.push({
       type: 'total',
       cells: [
         { html: 'Totale generale', cls: 'ident' },
-        { html: '', label: 'Portainnesto' },
+        { html: '', label: 'Portainnesto', cls: 'cell-sub' },
         { html: U.fmtQty(r.totals.mag), cls: 'r metric', label: 'Magazzino' },
         { html: U.fmtQty(r.totals.ord), cls: 'r metric', label: 'Ordinato' },
         { html: U.fmtQty(r.totals.sped), cls: 'r metric', label: 'Di cui spedito' },
         { html: U.fmtSigned(r.totals.disponibilita), cls: 'r metric', label: 'Disponibilità' },
         ...r.growers.map((g) => ({ html: U.fmtSigned(r.totals.per[g]), cls: `r metric${hl(g)}`, label: g })),
-        { html: U.fmtSigned(r.totals.nonAttr), cls: 'r metric', label: 'Non attribuito' },
-        { html: U.fmtSigned(r.totals.totaleProduttori), cls: 'r metric', label: 'Tot. produttori' },
       ],
     });
   }
@@ -410,36 +483,36 @@ export function viewPerProduttore(root, ctx) {
       icon: '◇', title: 'Nessun dato con i filtri selezionati',
       text: f.produttore
         ? `Nessuna combinazione con quantità di ${f.produttore} e questi filtri.`
-        : 'Rimuovi i filtri per vedere tutte le combinazioni.',
-      action: 'Rimuovi filtri',
+        : 'Prova un\'altra varietà o portainnesto.',
+      action: 'Rimuovi i filtri facoltativi',
     });
     host.querySelector('[data-empty-action]').addEventListener('click', () => ctx.navigate('#/r/produttore'));
     return;
   }
 
   host.innerHTML = `
-    <div class="banner banner-info"><span aria-hidden="true">i</span>
-      <span>Le quantità a magazzino sono divise per <code>lotti_magazzino.produttore</code>.
-      Un impegno entra nella colonna di un produttore solo se è collegato a un lotto
-      (<code>id_magazzino</code>); altrimenti finisce in <b>Non attribuito</b>.</span></div>
-    <div class="report">${U.buildTable({
+    ${unattributed ? `<div class="banner banner-warn"><span aria-hidden="true">⚠</span>
+      <span>${unattributed} combinazioni hanno impegni <b>non collegati a un lotto</b>: non sono
+      attribuibili a un produttore e non compaiono nelle colonne. Collega gli impegni al lotto in
+      <a class="link" href="#/dati/ordini">Ordini e impegni</a>.</span></div>` : ''}
+    <div class="report${table ? ' table-mode' : ''}">${U.buildTable({
+      scroll: true,
+      tableClass: 'matrix',
       caption: {
         wide: 'Disponibilità per produttore, un rigo per combinazione. Le prime due colonne restano visibili allo scorrimento orizzontale; la colonna del produttore filtrato è evidenziata.',
-        narrow: 'Disponibilità per produttore, un rigo per combinazione. La colonna del produttore filtrato è evidenziata.',
+        narrow: 'Disponibilità per produttore. La colonna del produttore filtrato è evidenziata.',
       },
-      scroll: true, cols, rows, tableClass: 'matrix',
+      cols, rows,
     })}</div>`;
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
     const out = r.rows.map((row) => [row.clone, row.varieta, row.portainnesto,
-      row.mag, row.ord, row.sped, row.disponibilita,
-      ...r.growers.map((g) => row.per[g]), row.nonAttr, row.totaleProduttori]);
+      row.mag, row.ord, row.sped, row.disponibilita, ...r.growers.map((g) => row.per[g])]);
     out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped,
-      r.totals.disponibilita, ...r.growers.map((g) => r.totals.per[g]),
-      r.totals.nonAttr, r.totals.totaleProduttori]);
+      r.totals.disponibilita, ...r.growers.map((g) => r.totals.per[g])]);
     U.exportCSV(`disponibilita_per_produttore_${U.nowStamp()}.csv`,
       ['Codice clone', 'Codice varietà', 'Codice portainnesto', 'Magazzino', 'Ordinato',
-       'Di cui spedito', 'Disponibilità', ...r.growers, 'Non attribuito', 'Tot. produttori'], out);
+       'Di cui spedito', 'Disponibilità', ...r.growers], out);
   });
 }
 
@@ -447,13 +520,15 @@ export function viewPerProduttore(root, ctx) {
 export function viewIndisponibilita(root, ctx) {
   const f = parseFilters(ctx.params);
   const r = S.reportIndisponibilita(f);
+  const table = wantsTableView(ctx);
   reportShell(root, {
     eyebrow: 'Riepiloghi / Indisponibilità',
     title: 'Indisponibilità',
     sub: r.count
       ? `${r.count} articoli in deficit · deficit totale ${U.fmtQty(r.deficitTot)} · ordinato per varietà → portainnesto → clone`
       : 'Ordinato per varietà → portainnesto → clone',
-    actions: `<button class="btn btn-secondary btn-sm" type="button" id="exportBtn"${r.count ? '' : ' disabled'}>Esporta CSV</button>`,
+    actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn"${r.count ? '' : ' disabled'}>Esporta CSV</button>`,
   });
   filterBar(root.querySelector('#filterHost'), f,
     (next) => ctx.navigate('#/r/indisponibilita' + serializeFilters(next)));
@@ -486,7 +561,8 @@ export function viewIndisponibilita(root, ctx) {
   host.innerHTML = `
     <div class="banner banner-error"><span aria-hidden="true">⚠</span>
       <span><b>${r.count} articoli</b> con disponibilità negativa · deficit totale <b>${U.fmtQty(r.deficitTot)}</b></span></div>
-    <div class="report">${U.buildTable({
+    <div class="report${table ? ' table-mode' : ''}">${U.buildTable({
+      scroll: table,
       caption: 'Il deficit è |magazzino − ordinato| mostrato con il segno meno.',
       cols: [{ label: 'Codice clone' }, { label: 'Tipologia' }, { label: 'Produzione' },
              { label: 'Portainnesto' }, { label: 'Magazzino', align: 'r' },
@@ -498,6 +574,74 @@ export function viewIndisponibilita(root, ctx) {
     U.exportCSV(`indisponibilita_${U.nowStamp()}.csv`,
       ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone', 'Codice portainnesto', 'Magazzino', 'Ordinato', 'Deficit'],
       r.rows.map((x) => [x.tipologia, x.produzione, x.varieta, x.clone, x.portainnesto, x.mag, x.ord, -x.deficit]));
+  });
+}
+
+/* ------------------------------------------------ S-21 da spedire */
+export function viewDaSpedire(root, ctx) {
+  const f = parseFilters(ctx.params, { mandatory: true });
+  const r = S.reportDaSpedire(f);
+  const table = wantsTableView(ctx);
+  reportShell(root, {
+    eyebrow: 'Riepiloghi / Da spedire',
+    title: 'Da spedire',
+    sub: `${r.rowCount} impegni da evadere · ${U.fmtQty(r.totals.quantita)} pezzi`,
+    actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm" type="button" id="exportBtn"${r.rowCount ? '' : ' disabled'}>Esporta CSV</button>`,
+  });
+  filterBar(root.querySelector('#filterHost'), f,
+    (next) => ctx.navigate('#/r/daspedire' + serializeFilters(next)),
+    { showPortainnesto: true, mandatory: ['tipologia', 'produzione'] });
+
+  const host = root.querySelector('#reportHost');
+  if (!r.rowCount) {
+    host.innerHTML = U.emptyState({
+      icon: '✓', title: 'Nessun impegno da spedire',
+      text: 'Tutti gli impegni con questi filtri risultano già spediti.',
+      action: 'Apri ordini e impegni',
+    });
+    host.querySelector('[data-empty-action]').addEventListener('click', () => ctx.navigate('#/dati/ordini'));
+    return;
+  }
+
+  const rows = r.rows.map((o) => ({
+    type: 'row',
+    cells: [
+      { html: `${U.esc(o.clone)}<small>${U.esc(o.varieta)}</small>`, cls: 'ident' },
+      { html: `<span class="ident">${U.esc(o.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+      { html: o.lotLabel ? U.esc(o.lotLabel) : '<span style="color:var(--ink-300)">—</span>', label: 'Lotto collegato' },
+      U.metric('Quantità', U.fmtQty(o.quantita), { cls: 'disp' }),
+    ],
+  }));
+  rows.push({
+    type: 'total',
+    cells: [
+      { html: 'Totale generale', cls: 'ident' },
+      { html: '', label: 'Portainnesto', cls: 'cell-sub' },
+      { html: `${r.rowCount} impegni`, label: 'Lotto collegato' },
+      { html: U.fmtQty(r.totals.quantita), cls: 'r metric', label: 'Quantità' },
+    ],
+  });
+
+  host.innerHTML = `
+    <div class="banner banner-warn"><span aria-hidden="true">🚚</span>
+      <span><b>${r.rowCount} impegni</b> non ancora spediti, per <b>${U.fmtQty(r.totals.quantita)}</b> pezzi.</span></div>
+    <div class="report${table ? ' table-mode' : ''}">${U.buildTable({
+      scroll: table,
+      caption: {
+        wide: 'Solo gli impegni con «Spedito» disattivato, ordinati per portainnesto e clone.',
+        narrow: 'Solo gli impegni da spedire.',
+      },
+      cols: [{ label: 'Codice clone' }, { label: 'Codice portainnesto' },
+             { label: 'Lotto collegato' }, { label: 'Quantità', align: 'r' }],
+      rows,
+    })}</div>`;
+
+  root.querySelector('#exportBtn').addEventListener('click', () => {
+    U.exportCSV(`da_spedire_${U.nowStamp()}.csv`,
+      ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone', 'Codice portainnesto', 'Lotto collegato', 'Quantità'],
+      r.rows.map((o) => [o.tipologia, o.produzione, o.varieta, o.clone, o.portainnesto,
+                         o.lotLabel || '', o.quantita]));
   });
 }
 
@@ -534,6 +678,8 @@ export function viewProfilo(root, ctx) {
     viti: S.store.viti.length, portainnesti: S.store.portainnesti.length,
     lotti: S.store.lotti.length, ordini: S.store.ordini.length,
   };
+  const seeAccounts = P.can(ctx.role, 'profilo.accounts');
+  const seeDocs = P.can(ctx.role, 'profilo.docs');
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Profilo</p>
@@ -547,25 +693,30 @@ export function viewProfilo(root, ctx) {
         <p class="caption mt">Valida ancora ${A.minutesLeft(s)} minuti.</p>
         <div class="row mt">
           <button class="btn btn-danger btn-sm" type="button" id="logoutBtn">Disconnetti</button>
+          ${P.can(ctx.role, 'config.utenti') ? '<a class="btn btn-secondary btn-sm" href="#/config/utenti">Gestione utenti</a>' : ''}
         </div>
       </section>
+
       <section class="card card-pad">
         <h2 class="eyebrow" style="margin-bottom:8px">Dati del dimostrativo</h2>
         <p class="caption">${U.fmtQty(counts.viti)} coppie varietà/clone · ${U.fmtQty(counts.portainnesti)} portainnesti ·
           ${U.fmtQty(counts.lotti)} lotti · ${U.fmtQty(counts.ordini)} impegni. Quantità sintetiche, struttura reale.</p>
         <div class="row mt">
           <button class="btn btn-secondary btn-sm" type="button" id="resetBtn">Azzera le modifiche locali</button>
-          <a class="btn btn-ghost btn-sm" href="docs/01-gui-specification.md">Specifica</a>
-          <a class="btn btn-ghost btn-sm" href="docs/mockups/fede-magazzino-mockup.drawio">Mockup</a>
+          ${seeDocs ? `
+            <a class="btn btn-ghost btn-sm" href="docs/01-gui-specification.md">Specifica</a>
+            <a class="btn btn-ghost btn-sm" href="docs/mockups/fede-magazzino-mockup.drawio">Mockup</a>` : ''}
         </div>
       </section>
+
+      ${seeAccounts ? `
       <section class="card card-pad">
-        <h2 class="eyebrow" style="margin-bottom:8px">Account dimostrativi</h2>
-        <p class="caption">Un utente per profilo (l'autenticazione è lato client: dimostra il flusso,
-          non protegge nulla).</p>
+        <h2 class="eyebrow" style="margin-bottom:8px">Account registrati</h2>
+        <p class="caption">Elenco degli utenti del dimostrativo. La gestione è in
+          <a class="link" href="#/config/utenti">Utenti</a>.</p>
         <div class="report mt">${U.buildTable({
           cols: [{ label: 'Profilo' }, { label: 'Utente' }, { label: 'Email' }, { label: 'Password' }],
-          rows: A.USERS.map((u) => ({
+          rows: A.listUsers().map((u) => ({
             type: 'row',
             cells: [
               { html: U.esc(P.roleLabel(u.role)), label: 'Profilo' },
@@ -575,7 +726,7 @@ export function viewProfilo(root, ctx) {
             ],
           })),
         })}</div>
-      </section>
+      </section>` : ''}
     </div>`;
   root.querySelector('#logoutBtn').addEventListener('click', () => ctx.logout());
   root.querySelector('#resetBtn').addEventListener('click', () => {
@@ -585,6 +736,201 @@ export function viewProfilo(root, ctx) {
       confirmLabel: 'Azzera', danger: true,
       onConfirm: () => { S.resetLocalEdits(); location.reload(); },
     });
+  });
+}
+
+/* ------------------------------------------- S-22 utenti (admin + ufficio) */
+export function viewUtenti(root, ctx) {
+  const users = A.listUsers();
+  const canEdit = P.can(ctx.role, 'config.utenti');
+  const statusBadge = (st) => st === 'attivo' ? '<span class="badge badge-ok">attivo</span>'
+    : st === 'invitato' ? '<span class="badge badge-warn">invitato</span>'
+    : '<span class="badge badge-danger">sospeso</span>';
+
+  root.innerHTML = `
+    <div class="page-head"><div>
+      <p class="eyebrow">Configurazione / Utenti</p>
+      <h1>Utenti</h1>
+      <p class="sub">${users.length} account · inviti, ruoli, sospensioni e reset password</p>
+    </div>
+    <div class="spacer"></div>
+    ${canEdit ? '<button class="btn btn-primary" type="button" id="inviteBtn">+ Invita utente</button>' : ''}</div>
+
+    <div class="banner banner-info"><span aria-hidden="true">i</span>
+      <span>La gestione utenti è dimostrativa: gli account vivono nel browser. In produzione
+      l'invito parte dal server con password monouso e link a scadenza.</span></div>
+
+    <div class="report">${U.buildTable({
+      cols: [{ label: 'Nome' }, { label: 'Email' }, { label: 'Ruolo' }, { label: 'Produttore' },
+             { label: 'Stato' }, { label: 'Azioni' }],
+      rows: users.map((u) => ({
+        type: 'row',
+        cells: [
+          { html: U.esc(u.name), cls: 'ident' },
+          { html: `<span class="ident">${U.esc(u.email)}</span>`, label: 'Email' },
+          { html: U.esc(P.roleLabel(u.role)), label: 'Ruolo' },
+          { html: u.grower ? U.esc(u.grower) : '<span style="color:var(--ink-300)">—</span>', label: 'Produttore' },
+          { html: statusBadge(u.status), label: 'Stato' },
+          { html: `<div class="row" style="gap:6px">
+              <button class="btn btn-secondary btn-sm" type="button" data-role-for="${U.esc(u.id)}">Ruolo</button>
+              <button class="btn btn-secondary btn-sm" type="button" data-reset-pw="${U.esc(u.id)}">Password</button>
+              ${u.status === 'sospeso'
+                ? `<button class="btn btn-secondary btn-sm" type="button" data-unblock="${U.esc(u.id)}">Riattiva</button>`
+                : `<button class="btn btn-danger btn-sm" type="button" data-block="${U.esc(u.id)}">Sospendi</button>`}
+            </div>`, label: 'Azioni' },
+        ],
+      })),
+    })}</div>
+
+    <div class="row mt">
+      <button class="btn btn-ghost btn-sm" type="button" id="resetRegistry">Ripristina gli utenti dimostrativi</button>
+    </div>`;
+
+  root.querySelector('#inviteBtn').addEventListener('click', () => {
+    U.openSheet({
+      title: 'Invita utente',
+      body: `<form id="inviteForm" novalidate>
+          <label class="field"><span>Nome e cognome</span><input type="text" name="name" required autocomplete="off"></label>
+          <label class="field"><span>Email</span><input type="email" name="email" required autocomplete="off"></label>
+          <label class="field"><span>Ruolo</span><select name="role">
+            ${P.ROLES.map((r) => `<option value="${r.key}">${U.esc(r.label)}</option>`).join('')}
+          </select></label>
+          <label class="field" id="growerField"><span>Produttore collegato</span><select name="grower">
+            <option value="">—</option>
+            ${S.store.meta.produttori.map((g) => `<option value="${U.esc(g)}">${U.esc(g)}</option>`).join('')}
+          </select></label>
+          <p class="field-error" id="inviteErr" hidden></p>
+        </form>`,
+      actions: [
+        { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
+        { label: 'Invita', class: 'btn-primary', run: () => submit() },
+      ],
+      onMount: (sheet) => {
+        const form = sheet.querySelector('#inviteForm');
+        const growerField = sheet.querySelector('#growerField');
+        const syncGrower = () => { growerField.hidden = form.elements.role.value !== 'produttore'; };
+        form.elements.role.addEventListener('change', syncGrower);
+        syncGrower();
+        function submit() {
+          const res = A.inviteUser({
+            name: form.elements.name.value,
+            email: form.elements.email.value,
+            role: form.elements.role.value,
+            grower: form.elements.grower.value,
+          });
+          const err = sheet.querySelector('#inviteErr');
+          if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+          U.closeSheet();
+          showPassword(`Invito creato per ${res.user.name}`,
+            'Password temporanea: comunicala all\'utente, non sarà più visibile.', res.password);
+          ctx.refresh();
+        }
+      },
+    });
+  });
+
+  root.querySelectorAll('[data-role-for]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const u = A.listUsers().find((x) => x.id === b.dataset.roleFor);
+      U.openSheet({
+        title: 'Cambia ruolo · ' + u.name,
+        body: `<form id="roleForm">
+            <label class="field"><span>Ruolo</span><select name="role">
+              ${P.ROLES.map((r) => `<option value="${r.key}"${u.role === r.key ? ' selected' : ''}>${U.esc(r.label)}</option>`).join('')}
+            </select></label>
+            <label class="field"><span>Produttore collegato</span><select name="grower">
+              <option value="">—</option>
+              ${S.store.meta.produttori.map((g) => `<option value="${U.esc(g)}"${u.grower === g ? ' selected' : ''}>${U.esc(g)}</option>`).join('')}
+            </select></label>
+            <p class="field-error" id="roleErr" hidden></p>
+          </form>`,
+        actions: [
+          { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
+          { label: 'Salva', class: 'btn-primary', run: () => save() },
+        ],
+        onMount: (sheet) => {
+          const form = sheet.querySelector('#roleForm');
+          function save() {
+            const res = A.setRole(u.id, form.elements.role.value);
+            const err = sheet.querySelector('#roleErr');
+            if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+            if (form.elements.role.value === 'produttore') A.setGrower(u.id, form.elements.grower.value);
+            U.closeSheet();
+            U.toast('Ruolo aggiornato');
+            ctx.refresh();
+          }
+        },
+      });
+    });
+  });
+
+  root.querySelectorAll('[data-reset-pw]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const u = A.listUsers().find((x) => x.id === b.dataset.resetPw);
+      U.confirmSheet({
+        title: 'Reimpostare la password?',
+        message: `Verrà generata una password temporanea per ${u.name}.`,
+        confirmLabel: 'Genera password',
+        onConfirm: () => {
+          const res = A.resetPassword(u.id);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+          showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password);
+          ctx.refresh();
+        },
+      });
+    });
+  });
+
+  root.querySelectorAll('[data-block]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const u = A.listUsers().find((x) => x.id === b.dataset.block);
+      U.confirmSheet({
+        title: 'Sospendere l\'utente?',
+        message: `${u.name} non potrà più accedere finché non viene riattivato.`,
+        confirmLabel: 'Sospendi', danger: true,
+        onConfirm: () => {
+          const res = A.blockUser(u.id);
+          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+          U.toast('Utente sospeso');
+          ctx.refresh();
+        },
+      });
+    });
+  });
+  root.querySelectorAll('[data-unblock]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const res = A.unblockUser(b.dataset.unblock);
+      if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
+      U.toast('Utente riattivato');
+      ctx.refresh();
+    });
+  });
+
+  root.querySelector('#resetRegistry').addEventListener('click', () => {
+    U.confirmSheet({
+      title: 'Ripristinare gli utenti dimostrativi?',
+      message: 'Inviti, sospensioni e password personalizzate vengono azzerati.',
+      confirmLabel: 'Ripristina', danger: true,
+      onConfirm: () => { A.resetRegistry(); ctx.refresh(); U.toast('Utenti dimostrativi ripristinati'); },
+    });
+  });
+}
+
+/** Shows a one-time password with a copy button. */
+function showPassword(title, message, password) {
+  U.openSheet({
+    title,
+    body: `<p class="caption">${U.esc(message)}</p>
+      <p class="mono" style="font-size:18px;font-weight:700;background:var(--brand-50);
+        border-radius:8px;padding:10px 12px;margin-top:10px">${U.esc(password)}</p>
+      <p class="hint">Copiala ora: non verrà mostrata di nuovo.</p>`,
+    actions: [
+      { label: 'Chiudi', class: 'btn-secondary', run: U.closeSheet },
+      { label: 'Copia', class: 'btn-primary', run: async () => {
+        try { await navigator.clipboard.writeText(password); U.toast('Password copiata'); }
+        catch { U.toast('Copia non disponibile', { tone: 'error' }); }
+      } },
+    ],
   });
 }
 
