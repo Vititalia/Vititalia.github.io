@@ -624,6 +624,90 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'registry reset clears the invite');
 }
 
+/* ---------------- passwords: the user changes their own, staff sets one ---------------- */
+{
+  const tapEl = (node) => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await loginAs('ufficio');                       // ufficio@vignero.it · Ufficio#2026
+  await go('#/profilo');
+  ok(/Cambia password/.test(text()), 'profilo: the «Cambia password» section is there');
+  tapEl(document.getElementById('changePwBtn'));
+  await wait(30);
+  const form = document.querySelector('#ownPwForm');
+  ok(!!form, 'profilo: the change-password sheet opens');
+  ok(!!form.elements.current && !!form.elements.next && !!form.elements.confirm,
+     'profilo: current, new and confirm fields');
+  const submitOwn = async (cur, next, conf) => {
+    form.elements.current.value = cur;
+    form.elements.next.value = next;
+    form.elements.confirm.value = conf;
+    document.querySelector('.sheet-actions [data-act="1"]').click();
+    await wait(40);
+    const err = document.querySelector('#ownPwErr');
+    return err && !err.hidden ? err.textContent : '';
+  };
+  ok(/attuale non è corretta/i.test(await submitOwn('Sbagliata#1', 'NuovaPass#2027', 'NuovaPass#2027')),
+     'profilo: a wrong current password is refused');
+  ok(/non coincidono/i.test(await submitOwn('Ufficio#2026', 'NuovaPass#2027', 'Diversa#2027')),
+     'profilo: the two new passwords must match');
+  ok(/almeno 8/i.test(await submitOwn('Ufficio#2026', 'corta', 'corta')),
+     'profilo: short passwords are refused');
+  // a correct change goes through and the old password stops working
+  form.elements.current.value = 'Ufficio#2026';
+  form.elements.next.value = 'Ufficio#2027';
+  form.elements.confirm.value = 'Ufficio#2027';
+  document.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(60);
+  ok(!(await auth.authenticate('ufficio@vignero.it', 'Ufficio#2026')).ok,
+     'profilo: the old password no longer works');
+  ok((await auth.authenticate('ufficio@vignero.it', 'Ufficio#2027')).ok,
+     'profilo: the new password works');
+
+  // staff sets a password of their choosing for someone else
+  await loginAs('ufficio');
+  await go('#/config/utenti');
+  const target = auth.listUsers().find((u) => u.email === 'produttore@vignero.it');
+  const btn = [...document.querySelectorAll('[data-reset-pw]')].find((b) => b.dataset.resetPw === target.id);
+  tapEl(btn);
+  await wait(40);
+  const pwForm = document.querySelector('#pwForm');
+  ok(!!pwForm, 'utenti: the password sheet opens with two modes');
+  ok(pwForm.querySelectorAll('input[name="mode"]').length === 2, 'utenti: generate or set');
+  ok(document.querySelector('#pwFields').hidden, 'utenti: the fields are hidden in «genera» mode');
+  pwForm.querySelector('input[name="mode"][value="set"]').click();
+  await wait(20);
+  ok(!document.querySelector('#pwFields').hidden, 'utenti: choosing «imposta» reveals the fields');
+  ok(document.querySelector('.sheet-actions [data-act="1"]').textContent.trim() === 'Imposta',
+     'utenti: the primary action becomes «Imposta»');
+  pwForm.elements.next.value = 'Scelta123';
+  pwForm.elements.confirm.value = 'Scelta999';
+  document.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(40);
+  ok(/non coincidono/i.test(document.querySelector('#pwErr').textContent),
+     'utenti: mismatched passwords are refused');
+  pwForm.elements.next.value = 'Scelta#2027';
+  pwForm.elements.confirm.value = 'Scelta#2027';
+  document.querySelector('.sheet-actions [data-act="1"]').click();
+  await wait(60);
+  ok(!document.querySelector('#pwForm'), 'utenti: the sheet closes after setting the password');
+  ok((await auth.authenticate('produttore@vignero.it', 'Scelta#2027')).ok,
+     'utenti: the person can sign in with the chosen password');
+  ok(!(await auth.authenticate('produttore@vignero.it', 'Produttore#2026')).ok,
+     'utenti: the previous password stopped working');
+
+  // «genera» mode still issues a one-time password in the panel
+  await go('#/config/utenti');
+  const again = [...document.querySelectorAll('[data-reset-pw]')].find((b) => b.dataset.resetPw === target.id);
+  tapEl(again);
+  await wait(40);
+  document.querySelector('.sheet-actions [data-act="1"]').click();   // generate (default)
+  await wait(80);
+  const panel = document.querySelector('#sheetRoot .sheet .mono');
+  ok(!!panel && /^[A-Z]/.test(panel.textContent.trim()),
+     `utenti: «genera» still shows a one-time password (${panel ? panel.textContent.trim() : '—'})`);
+  document.querySelector('#sheetRoot .sheet-actions [data-act="0"]').click();   // Chiudi
+  await auth.resetRegistry();
+}
+
 /* ---------------- anagrafica vite: flat list, variety is a filter ---------------- */
 {
   await loginAs('ufficio');

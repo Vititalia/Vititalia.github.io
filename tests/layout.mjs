@@ -814,6 +814,40 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   await lotti.ctx.close();
 }
 
+/* ------------------------- password sheets on a phone ---------------------- */
+{
+  const { page, ctx } = await open({ width: 390, height: 844 }, '#/profilo');
+  const card = await page.evaluate(() => ({
+    btn: !!document.getElementById('changePwBtn'),
+    txt: document.getElementById('main').textContent.includes('Cambia la password'),
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+  }));
+  ok(card.btn, 'profilo (phone): «Cambia password» button');
+  ok(card.txt, 'profilo (phone): the section explains the rule');
+  ok(card.overflow <= 1, `profilo (phone): no sideways scroll (${card.overflow}px)`);
+
+  await page.click('#changePwBtn');
+  await page.waitForSelector('#ownPwForm');
+  const sheet = await page.evaluate(() => {
+    const s = document.querySelector('#sheetRoot .sheet');
+    const inputs = [...s.querySelectorAll('input')];
+    return {
+      inputs: inputs.length,
+      types: inputs.map((i) => i.type),
+      hidden: inputs.every((i) => getComputedStyle(i).visibility !== 'hidden'),
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      actions: [...s.querySelectorAll('.sheet-actions .btn')].map((b) => b.textContent.trim()),
+      box: Math.round(s.getBoundingClientRect().width),
+    };
+  });
+  ok(sheet.inputs === 3 && sheet.types.every((t) => t === 'password'),
+     `profilo sheet: three password fields (${sheet.types.join(',')})`);
+  ok(sheet.actions.includes('Salva password'), `profilo sheet: actions (${sheet.actions.join(' · ')})`);
+  ok(sheet.box <= 390, `profilo sheet fits the phone (${sheet.box}px)`);
+  ok(sheet.overflow <= 1, `profilo sheet: no sideways scroll (${sheet.overflow}px)`);
+  await ctx.close();
+}
+
 /* producer phone: cards, subtotal first, no «da spedire» */
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });

@@ -853,6 +853,15 @@ export function viewProfilo(root, ctx) {
       </section>
 
       <section class="card card-pad">
+        <h2 class="eyebrow" style="margin-bottom:8px">Password</h2>
+        <p class="caption">Cambia la password del tuo accesso: per sicurezza serve quella attuale.
+          Minimo 8 caratteri, massimo 72.</p>
+        <div class="row mt">
+          <button class="btn btn-secondary btn-sm" type="button" id="changePwBtn">Cambia password</button>
+        </div>
+      </section>
+
+      <section class="card card-pad">
         <h2 class="eyebrow" style="margin-bottom:8px">Dati del dimostrativo</h2>
         <p class="caption">${U.fmtQty(counts.viti)} coppie varietà/clone · ${U.fmtQty(counts.portainnesti)} portainnesti ·
           ${U.fmtQty(counts.lotti)} lotti · ${U.fmtQty(counts.ordini)} impegni. Quantità sintetiche, struttura reale.</p>
@@ -884,6 +893,7 @@ export function viewProfilo(root, ctx) {
       </section>` : ''}
     </div>`;
   root.querySelector('#logoutBtn').addEventListener('click', () => ctx.logout());
+  root.querySelector('#changePwBtn').addEventListener('click', () => openPasswordSheet(ctx));
   root.querySelector('#resetBtn').addEventListener('click', () => {
     U.confirmSheet({
       title: 'Azzerare le modifiche locali?',
@@ -891,6 +901,53 @@ export function viewProfilo(root, ctx) {
       confirmLabel: 'Azzera', danger: true,
       onConfirm: () => { S.resetLocalEdits(); location.reload(); },
     });
+  });
+}
+
+/**
+ * «Cambia password» for the signed-in user: the current password is verified by
+ * the backend (`changeOwnPassword`), never trusted from the session alone.
+ */
+function openPasswordSheet(ctx) {
+  const email = (ctx.session && ctx.session.email) || '';
+  let submitFn = null;
+  U.openSheet({
+    title: 'Cambia password',
+    body: `<form id="ownPwForm" novalidate>
+        <p class="caption">Accesso: <b>${U.esc(email)}</b></p>
+        <label class="field"><span>Password attuale</span>
+          <input type="password" name="current" autocomplete="current-password" required></label>
+        <label class="field"><span>Nuova password</span>
+          <input type="password" name="next" autocomplete="new-password" required minlength="8"></label>
+        <label class="field"><span>Ripeti la nuova password</span>
+          <input type="password" name="confirm" autocomplete="new-password" required minlength="8"></label>
+        <p class="hint">Almeno 8 caratteri. Se non ricordi quella attuale, chiedi
+          all'amministratore di reimpostarla.</p>
+        <p class="field-error" id="ownPwErr" hidden></p>
+      </form>`,
+    actions: [
+      { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
+      { label: 'Salva password', class: 'btn-primary', run: () => { if (submitFn) submitFn(); } },
+    ],
+    onMount: (sheet) => {
+      const form = sheet.querySelector('#ownPwForm');
+      async function submit() {
+        const err = sheet.querySelector('#ownPwErr');
+        const current = form.elements.current.value;
+        const next = form.elements.next.value;
+        const problems = A.passwordIssues(next, { confirm: form.elements.confirm.value, email });
+        if (problems.length) { err.hidden = false; err.textContent = problems.join(' '); return; }
+        const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+        btn.disabled = true; btn.textContent = 'Salvataggio…';
+        const res = await A.changeOwnPassword({ email, currentPassword: current, newPassword: next });
+        btn.disabled = false; btn.textContent = 'Salva password';
+        if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+        U.closeSheet();
+        U.toast('Password aggiornata');
+      }
+      submitFn = submit;
+      form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+    },
   });
 }
 
@@ -1044,20 +1101,92 @@ export function viewUtenti(root, ctx) {
     });
   });
 
+  /* Password: either generate a one-time password or type one yourself (PD-9) */
+  let pwSubmitFn = null;
   root.querySelectorAll('[data-reset-pw]').forEach((b) => {
     b.addEventListener('click', () => {
       const u = A.listUsers().find((x) => x.id === b.dataset.resetPw);
-      U.confirmSheet({
-        title: 'Reimpostare la password?',
-        message: `Verrà generata una password temporanea per ${u.name}.`,
-        confirmLabel: 'Genera password',
-        onConfirm: async () => {
-          const res = await A.resetPassword(u, { viaEmail: A.credentialsEmailAvailable() });
-          if (!res.ok) { U.toast(res.error, { tone: 'error' }); return; }
-          ctx.refresh();
-          showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password,
-            A.backend() === 'supabase' ? u.email : null,
-            { mail: res.mail, name: u.name, role: u.role });
+      const canEmail = A.credentialsEmailAvailable();
+      U.openSheet({
+        title: 'Password · ' + u.name,
+        body: `<form id="pwForm" novalidate>
+            <p class="caption">Account <b>${U.esc(u.email)}</b> · ${U.esc(P.roleLabel(u.role))}</p>
+            <div class="field">
+              <span>Come vuoi procedere</span>
+              <label class="radio-row"><input type="radio" name="mode" value="generate" checked>
+                <span>Genera una password temporanea</span></label>
+              <p class="hint" style="margin:2px 0 10px 30px">La vedi una sola volta e la consegni tu${canEmail ? ', oppure parte subito per email' : ''}.</p>
+              <label class="radio-row"><input type="radio" name="mode" value="set">
+                <span>Imposta una password scelta da te</span></label>
+              <p class="hint" style="margin:2px 0 0 30px">Utile quando la persona deve usare una password già concordata.</p>
+            </div>
+            <div id="pwFields" hidden>
+              <label class="field"><span>Nuova password</span>
+                <input type="password" name="next" autocomplete="new-password" minlength="8"></label>
+              <label class="field"><span>Ripeti la password</span>
+                <input type="password" name="confirm" autocomplete="new-password" minlength="8"></label>
+              <p class="hint">Almeno 8 caratteri, massimo 72. Comunicala tu: non viene mostrata altrove.</p>
+            </div>
+            <p class="field-error" id="pwErr" hidden></p>
+          </form>`,
+        actions: [
+          { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
+          { label: 'Applica', class: 'btn-primary', run: () => { if (pwSubmitFn) pwSubmitFn(); } },
+        ],
+        onMount: (sheet) => {
+          const form = sheet.querySelector('#pwForm');
+          const fields = sheet.querySelector('#pwFields');
+          const err = sheet.querySelector('#pwErr');
+          const mode = () => (form.querySelector('input[name="mode"]:checked') || {}).value || 'generate';
+          const syncMode = () => {
+            const set = mode() === 'set';
+            fields.hidden = !set;
+            sheet.querySelector('.sheet-actions [data-act="1"]').textContent = set ? 'Imposta' : 'Genera';
+            err.hidden = true;
+          };
+          form.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', syncMode));
+          syncMode();
+
+          async function submit() {
+            const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+            if (mode() === 'set') {
+              const problems = A.passwordIssues(form.elements.next.value,
+                { confirm: form.elements.confirm.value, email: u.email });
+              if (problems.length) { err.hidden = false; err.textContent = problems.join(' '); return; }
+              btn.disabled = true; btn.textContent = 'Impostazione…';
+              const res = await A.setUserPassword(u, form.elements.next.value);
+              btn.disabled = false; syncMode();
+              if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+              const pwd = form.elements.next.value;
+              U.closeSheet();
+              U.toast(`Password di ${u.name} aggiornata`, canEmail ? {
+                ms: 8000,
+                action: { label: 'Invia email', run: async () => {
+                  const mail = await A.resendCredentialsEmail({
+                    email: u.email, name: u.name, role: u.role, password: pwd,
+                  });
+                  const sent = mail.ok && mail.email_sent;
+                  U.toast(sent ? 'Email inviata a ' + u.email
+                    : (mail.error || mail.mail_error || 'Invio non riuscito'),
+                  { tone: sent ? undefined : 'error' });
+                } },
+              } : undefined);
+              ctx.refresh();
+              return;
+            }
+            // generate: the one-time password panel (with the optional e-mail)
+            btn.disabled = true; btn.textContent = 'Generazione…';
+            const res = await A.resetPassword(u, { viaEmail: canEmail });
+            btn.disabled = false; syncMode();
+            if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
+            U.closeSheet();
+            ctx.refresh();          // render() closes sheets → refresh before the panel
+            showPassword('Password reimpostata', `Nuova password per ${u.name}:`, res.password,
+              A.backend() === 'supabase' ? u.email : null,
+              { mail: res.mail, name: u.name, role: u.role });
+          }
+          pwSubmitFn = submit;
+          form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
         },
       });
     });

@@ -128,6 +128,35 @@ function demoSetStatus(id, status) {
 const demoBlock = (id) => demoSetStatus(id, 'sospeso');
 const demoUnblock = (id) => demoSetStatus(id, 'attivo');
 
+/** The signed-in demo user changes their own password, giving the current one. */
+function demoChangeOwnPassword({ email, currentPassword, newPassword }) {
+  const list = read();
+  const mail = String(email || '').trim().toLowerCase();
+  const user = list.find((u) => u.email.toLowerCase() === mail);
+  if (!user) return { ok: false, error: 'Utente non trovato.' };
+  if (user.password !== String(currentPassword || '')) {
+    return { ok: false, error: 'La password attuale non è corretta.' };
+  }
+  if (user.password === String(newPassword || '')) {
+    return { ok: false, error: 'La nuova password deve essere diversa da quella attuale.' };
+  }
+  user.password = String(newPassword);
+  if (user.status === 'invitato') user.status = 'attivo';
+  write(list);
+  return { ok: true };
+}
+
+/** Staff picks a password for someone else (no new password is generated). */
+function demoSetUserPassword(id, password) {
+  const list = read();
+  const user = list.find((u) => u.id === id);
+  if (!user) return { ok: false, error: 'Utente non trovato.' };
+  user.password = String(password);
+  if (user.status === 'invitato') user.status = 'attivo';
+  write(list);
+  return { ok: true, user };
+}
+
 /** Reset a password: returns the new temporary one (shown once). */
 function demoResetPassword(id) {
   const list = read();
@@ -456,6 +485,58 @@ export async function resetPassword(user, { viaEmail = false } = {}) {
 export async function resendCredentialsEmail({ email, name, role, password }) {
   if (!passwordLooksSafe(password)) return { ok: false, error: 'Password non valida.' };
   return emailCredentials({ action: 'resend', email, name, role, password });
+}
+
+/* ------------------------------------------------------------- passwords */
+/** Italian messages for the rules both password forms share (8…72 chars). */
+export function passwordIssues(password, { confirm, email } = {}) {
+  const pw = String(password || '');
+  const out = [];
+  if (pw.length < 8) out.push('Almeno 8 caratteri.');
+  if (pw.length > 72) out.push('Massimo 72 caratteri.');
+  if (pw && email && pw.toLowerCase() === String(email).toLowerCase()) {
+    out.push('La password non può essere l\'indirizzo email.');
+  }
+  if (confirm !== undefined && pw !== String(confirm || '')) {
+    out.push('Le due password non coincidono.');
+  }
+  return out;
+}
+
+/**
+ * Change your own password: the current one is verified against the backend
+ * before the new one is stored (a session alone is not enough).
+ */
+export async function changeOwnPassword({ email, currentPassword, newPassword }) {
+  const problems = passwordIssues(newPassword, { email });
+  if (problems.length) return { ok: false, error: problems[0] };
+  if (String(currentPassword || '') === String(newPassword || '')) {
+    return { ok: false, error: 'La nuova password deve essere diversa da quella attuale.' };
+  }
+  if (backend() === 'demo') return demoChangeOwnPassword({ email, currentPassword, newPassword });
+  const c = await sb();
+  // prove the old password first: updateUser() alone would accept any session
+  const { error: check } = await c.auth.signInWithPassword({
+    email, password: String(currentPassword || ''),
+  });
+  if (check) return { ok: false, error: 'La password attuale non è corretta.' };
+  const { error } = await c.auth.updateUser({ password: String(newPassword) });
+  if (error) return { ok: false, error: italian(error.message) };
+  return { ok: true };
+}
+
+/** Staff sets a password of their choosing for another user (RPC, staff-checked). */
+export async function setUserPassword(user, password) {
+  const problems = passwordIssues(password, { email: user && user.email });
+  if (problems.length) return { ok: false, error: problems[0] };
+  if (backend() === 'demo') return demoSetUserPassword(user.id, String(password));
+  const c = await sb();
+  const { error } = await c.rpc('set_user_password', {
+    p_email: user.email, p_password: String(password),
+  });
+  if (error) return { ok: false, error: italian(error.message) };
+  await refreshUsers();
+  return { ok: true };
 }
 
 /** Remove an account (administrators only, enforced by the RPC). */

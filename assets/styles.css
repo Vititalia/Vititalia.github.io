@@ -134,6 +134,12 @@ label.field.check-field{display:flex;align-items:center;gap:10px;background:var(
   border:1px solid var(--line);border-radius:var(--r-card);padding:10px 12px;margin-bottom:6px}
 label.field.check-field > input[type="checkbox"]{width:20px;height:20px;min-height:0;margin:0;flex:0 0 auto}
 label.field.check-field > span{margin:0;font-size:13px;line-height:18px;color:var(--ink-900)}
+/* radio rows inside a form: one choice per line, the hint sits under its own option */
+label.radio-row{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:0;
+  background:var(--canvas);border:1px solid var(--line);border-radius:var(--r-card);cursor:pointer}
+label.radio-row + label.radio-row{margin-top:6px}
+label.radio-row > input[type="radio"]{width:20px;height:20px;min-height:0;margin:0;flex:0 0 auto}
+label.radio-row > span{font-size:13px;line-height:18px;color:var(--ink-900);font-weight:600}
 .field-error{color:var(--danger);font-size:12px;margin-top:4px;font-weight:600}
 input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger-600);border-width:2px}
 .filters{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:12px}
