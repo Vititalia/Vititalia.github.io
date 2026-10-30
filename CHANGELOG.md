@@ -49,6 +49,14 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 16. An order can be saved with no lot at all
+
+The lot picker offers **«— Nessun lotto —»** as its first choice and the form has a
+**«Nessun lotto»** button that detaches the current one, keeping the dimensions
+already filled. A line under the picker states what is linked («Collegato: Donati ·
+2026 · CHARDONNAY B. · 95» or «Nessun lotto collegato»), and the order saves with
+`id_magazzino = NULL`.
+
 ## 15. Three links removed
 
 * **«Ripristina gli utenti dimostrativi»** (Utenti) — gone, together with its

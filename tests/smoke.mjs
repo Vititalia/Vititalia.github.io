@@ -553,14 +553,16 @@ await wait(20);
 const osheet = document.querySelector('.sheet');
 ok(!!osheet, 'order form sheet opens');
 
-/* the order must be linked to a lot: pick the first suggestion */
+/* the lot picker offers «nessun lotto» first, then the lots */
 const lotInput = osheet.querySelector('[data-lot] input');
 ok(!!lotInput, 'order form has the lot picker');
 lotInput.value = '';
 lotInput.dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(20);
-const lotSuggestion = osheet.querySelector('.combo-list button[data-i]');
-ok(!!lotSuggestion, 'lot picker suggests lots');
+const suggestions = [...osheet.querySelectorAll('.combo-list button[data-i]')];
+ok(suggestions.length > 1, `lot picker suggests the null option and the lots (${suggestions.length})`);
+ok(/Nessun lotto/.test(suggestions[0].textContent), 'the first suggestion is «— Nessun lotto —»');
+const lotSuggestion = suggestions[1];
 click(lotSuggestion);
 await wait(30);
 ok(!!osheet.querySelector('[name="id_magazzino"]').value, 'picking a lot stores its id');
@@ -610,6 +612,50 @@ function setSelectIn(root, name, value) {
     box.value = ''; box.dispatchEvent(new window.Event('input', { bubbles: true }));
     await wait(400);
   }
+}
+
+/* ---------------- the linked lot can be cleared and saved as NULL ---------------- */
+{
+  await loginAs('admin');
+  await go('#/dati/ordini');
+  const S6 = await import('../js/store.js');
+  const lot = S6.store.lotti.find((l) => l.quantita > 10 && l.produttore);
+  click(document.getElementById('newBtn'));
+  await wait(40);
+  const form = document.querySelector('#ordForm');
+  ok(!!form, 'order form opens for the null-lot test');
+
+  /* pick a lot the normal way */
+  const input = document.querySelector('#ordForm [data-lot] input');
+  input.value = '';
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await wait(30);
+  const options = [...document.querySelectorAll('#ordForm .combo-list button[data-i]')];
+  click(options[1]);
+  await wait(40);
+  ok(form.elements.id_magazzino.value !== '', 'a lot can be picked');
+  ok(/Collegato:/.test(document.getElementById('lotState').textContent), 'the form says which lot is linked');
+
+  /* now detach it */
+  const clearBtn = document.getElementById('clearLot');
+  ok(!!clearBtn && !clearBtn.disabled, 'the «Nessun lotto» button is available');
+  click(clearBtn);
+  await wait(40);
+  ok(form.elements.id_magazzino.value === '', 'the lot is detached');
+  ok(document.querySelector('#ordForm [data-lot] input').value === '', 'the picker is emptied too');
+  ok(/Nessun lotto collegato/.test(document.getElementById('lotState').textContent),
+     'the form says no lot is linked');
+
+  /* and the order saves with a NULL lot */
+  const clone = form.elements.clone;
+  if (!clone.value && clone.options.length) clone.selectedIndex = Math.min(1, clone.options.length - 1);
+  form.elements.quantita.value = '4';
+  click(document.querySelector('.sheet-actions [data-act="1"]'));
+  await wait(120);
+  const saved = S6.store.ordini.filter((o) => o.quantita === 4 && o.id_magazzino === null);
+  ok(saved.length === 1, `the order is saved without a lot (${saved.length})`);
+  if (saved.length) await S6.removeOrdine(saved[0].id);
+  await go('#/dati/ordini');
 }
 
 /* ---------------- Nuovo impegno: the residual value is shown before saving ---------------- */

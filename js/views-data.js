@@ -390,11 +390,14 @@ export function viewOrdini(root, ctx) {
 
 function openOrdineForm(ctx, existing) {
   const isEdit = !!existing;
-  const lotItems = S.store.lotti.map((l) => ({
-    value: l.id,
-    label: `${l.produttore || 'Non attribuito'} · ${l.anno} · ${l.varieta} · ${l.clone}`,
-    sub: `${l.portainnesto} · ${U.fmtQty(l.quantita)} piante`,
-  }));
+  const lotItems = [
+    { value: '', label: '— Nessun lotto —', sub: 'salva l\'impegno senza collegarlo a un lotto' },
+    ...S.store.lotti.map((l) => ({
+      value: l.id,
+      label: `${l.produttore || 'Non attribuito'} · ${l.anno} · ${l.varieta} · ${l.clone}`,
+      sub: `${l.portainnesto} · ${U.fmtQty(l.quantita)} piante`,
+    })),
+  ];
   const existingLot = existing && existing.id_magazzino
     ? S.store.index.lotById.get(existing.id_magazzino) : null;
   let submitFn = null;
@@ -405,6 +408,10 @@ function openOrdineForm(ctx, existing) {
       <form id="ordForm" novalidate>
         <label class="field"><span>Lotto collegato</span><div data-lot></div></label>
         <input type="hidden" name="id_magazzino" value="${existing && existing.id_magazzino ? existing.id_magazzino : ''}">
+        <div class="row lot-actions" style="margin:-6px 0 12px">
+          <button class="btn btn-ghost btn-sm" type="button" id="clearLot">Nessun lotto</button>
+          <span class="hint" id="lotState"></span>
+        </div>
         ${selectHTML('tipologia', 'Tipologia', S.store.meta.tipologie, existing && existing.tipologia)}
         ${selectHTML('produzione', 'Produzione', S.store.meta.produzioni, existing && existing.produzione)}
         <label class="field"><span>Codice varietà</span><div data-variety></div></label>
@@ -429,10 +436,29 @@ function openOrdineForm(ctx, existing) {
     onMount: (sheet) => {
       const form = sheet.querySelector('#ordForm');
       const vc = wireVarietyClone(sheet, { varieta: existing && existing.varieta, clone: existing && existing.clone });
+      const lotState = sheet.querySelector('#lotState');
+      const paintLotState = () => {
+        const id = form.elements.id_magazzino.value;
+        const lot = id ? S.store.index.lotById.get(id) : null;
+        if (lotState) {
+          lotState.textContent = lot
+            ? `Collegato: ${lot.produttore || '—'} · ${lot.anno} · ${lot.varieta} · ${lot.clone}`
+            : 'Nessun lotto collegato';
+        }
+        const clear = sheet.querySelector('#clearLot');
+        if (clear) clear.disabled = !lot;
+      };
       const lotBox = U.combobox(sheet.querySelector('[data-lot]'), {
         items: lotItems,
         placeholder: 'Cerca lotto (produttore, varietà, clone)…',
         onPick: (id) => {
+          if (!id) {                          // «— Nessun lotto —»: detach and keep the dimensions
+            form.elements.id_magazzino.value = '';
+            paintLotState();
+            updateImpact();
+            U.toast('Lotto scollegato: l\'impegno sarà salvato senza lotto');
+            return;
+          }
           const lot = S.store.index.lotById.get(id);
           if (!lot) return;
           form.elements.id_magazzino.value = lot.id;
@@ -440,13 +466,23 @@ function openOrdineForm(ctx, existing) {
           form.elements.produzione.value = lot.produzione || '';
           form.elements.portainnesto.value = lot.portainnesto || '';
           if (vc && vc.setVarieta) vc.setVarieta(lot.varieta, lot.clone);
+          paintLotState();
           updateImpact();
           U.toast('Dimensioni compilate dal lotto');
         },
       });
+      sheet.querySelector('#clearLot').addEventListener('click', () => {
+        form.elements.id_magazzino.value = '';
+        const box = sheet.querySelector('[data-lot] input');
+        if (box) box.value = '';
+        paintLotState();
+        updateImpact();
+        U.toast('Lotto scollegato: l\'impegno sarà salvato senza lotto');
+      });
       if (existingLot) {
         lotBox.set(existingLot.id, `${existingLot.produttore || '—'} · ${existingLot.anno} · ${existingLot.varieta} · ${existingLot.clone}`);
       }
+      paintLotState();
 
       form.addEventListener('change', updateImpact);
       form.addEventListener('input', U.debounce(updateImpact, 300));
