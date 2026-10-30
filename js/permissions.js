@@ -16,7 +16,7 @@ export const MATRIX = [
   { cap: 'Panoramica / Home',       v: { admin: 'R', ufficio: 'R', produttore: 'R', vendite: 'R' } },
   { cap: 'Riepilogo disponibilità', v: { admin: 'R', ufficio: 'R', produttore: 'R', vendite: 'R' } },
   { cap: 'Riepilogo per produttore', v: { admin: 'R', ufficio: 'R', produttore: '—', vendite: '—' } },
-  { cap: 'Indisponibilità',         v: { admin: 'R', ufficio: 'R', produttore: 'R', vendite: '—' } },
+  { cap: 'Mancanze',                v: { admin: 'R', ufficio: 'R', produttore: 'R', vendite: '—' } },
   { cap: 'Da spedire',              v: { admin: 'R', ufficio: 'R', produttore: '—', vendite: '—' } },
   { cap: 'Messo a disposizione',    v: { admin: '—', ufficio: '—', produttore: 'R', vendite: '—' } },
   { cap: 'Lotti magazzino',         v: { admin: 'E', ufficio: 'E', produttore: '—', vendite: '—' } },
@@ -78,7 +78,7 @@ export const RAIL = [
   { group: 'Riepiloghi', items: [
     { cap: 'r.disponibilita', label: 'Disponibilità', href: '#/r/disponibilita' },
     { cap: 'r.produttore', label: 'Per produttore', href: '#/r/produttore' },
-    { cap: 'r.indisponibilita', label: 'Indisponibilità', href: '#/r/indisponibilita' },
+    { cap: 'r.indisponibilita', label: 'Mancanze', href: '#/r/indisponibilita' },
     { cap: 'r.daspedire', label: 'Da spedire', href: '#/r/daspedire' },
   ] },
   { group: 'Dati', pcOnly: true, items: [
@@ -104,7 +104,7 @@ export function tabsFor(role) {
     t.push({ cap: 'r.disponibilita', label: 'Riepiloghi', href: '#/r/disponibilita', icon: 'table' });
   }
   if (can(role, 'r.indisponibilita')) {
-    t.push({ cap: 'r.indisponibilita', label: 'Deficit', href: '#/r/indisponibilita', icon: 'alert' });
+    t.push({ cap: 'r.indisponibilita', label: 'Mancanze', href: '#/r/indisponibilita', icon: 'alert' });
   } else if (can(role, 'dati.lotti')) {
     t.push({ cap: 'dati.lotti', label: 'Dati', href: '#/dati/lotti', icon: 'edit' });
   }

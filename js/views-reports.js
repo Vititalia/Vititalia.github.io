@@ -131,7 +131,7 @@ function launcherGroups(s, role, isPC) {
       { cap: 'r.produttore', href: '#/r/produttore', icon: 'users',
         title: 'Per produttore', sub: 'Le colonne dei soci' },
       { cap: 'r.indisponibilita', href: '#/r/indisponibilita', icon: 'alert',
-        title: 'Indisponibilità', sub: 'Solo i deficit', badge: s.negativeCount, badgeTone: 'danger' },
+        title: 'Mancanze', sub: 'Solo i deficit', badge: s.negativeCount, badgeTone: 'danger' },
       { cap: 'r.daspedire', href: '#/r/daspedire', icon: 'truck',
         title: 'Da spedire', sub: 'Impegni da evadere', badge: s.ordiniNonSpediti },
       { cap: 'r.messodisposizione', href: '#/r/messodisposizione', icon: 'leaf',
@@ -199,7 +199,7 @@ export function viewHome(root, ctx) {
       ${showNegKpi ? `
       <button class="kpi ${neg ? 'tone-danger' : 'tone-ok'}" type="button"
               data-go="${canSeeNeg ? '#/r/indisponibilita' : '#/r/disponibilita'}">
-        <span class="k-label">In indisponibilità</span>
+        <span class="k-label">In mancanze</span>
         <span class="k-value">${neg}</span>
         <span class="k-sub">${neg ? 'combinazioni in deficit' : 'nessun deficit'}</span>
       </button>` : ''}
@@ -261,7 +261,7 @@ export function viewHome(root, ctx) {
       <section class="card">
         <div class="card-pad" style="border-bottom:1px solid var(--line)">
           <div class="row-between">
-            <h2 class="eyebrow">Indisponibilità principali</h2>
+            <h2 class="eyebrow">Mancanze principali</h2>
             <a class="link" href="#/r/indisponibilita" style="font-size:12px">Vedi tutte ›</a>
           </div>
         </div>
@@ -272,7 +272,7 @@ export function viewHome(root, ctx) {
               <span class="ident" style="color:var(--danger)">⚠ ${U.esc(r.clone)}<small>${U.esc(r.varieta)} · ${U.esc(r.portainnesto)}</small></span>
               <b class="num" style="color:var(--danger)">\u2212${U.fmtQty(r.deficit)}</b>
             </li>`).join('')}
-        </ul>` : `<p class="card-pad caption">Nessuna indisponibilità: magazzino ≥ ordinato su tutte le combinazioni.</p>`}
+        </ul>` : `<p class="card-pad caption">Nessuna mancanza: magazzino ≥ ordinato su tutte le combinazioni.</p>`}
       </section>` : ''}
 
       ${canSeeShip ? `
@@ -643,8 +643,8 @@ export function viewIndisponibilita(root, ctx) {
   const r = S.reportIndisponibilita(f);
   const table = wantsTableView(ctx);
   reportShell(root, {
-    eyebrow: 'Riepiloghi / Indisponibilità',
-    title: 'Indisponibilità',
+    eyebrow: 'Riepiloghi / Mancanze',
+    title: 'Mancanze',
     sub: r.count
       ? `${r.count} articoli in deficit · deficit totale ${U.fmtQty(r.deficitTot)} · ordinato per portainnesto → clone`
       : 'Ordinato per portainnesto → clone',
@@ -657,7 +657,7 @@ export function viewIndisponibilita(root, ctx) {
   const host = root.querySelector('#reportHost');
   if (!r.count) {
     host.innerHTML = U.emptyState({
-      icon: '✓', title: 'Nessuna indisponibilità con i filtri attuali',
+      icon: '✓', title: 'Nessuna mancanza con i filtri attuali',
       text: activeChips(f).length ? 'Prova a rimuovere i filtri.' : 'Magazzino ≥ ordinato su tutte le combinazioni.',
       action: activeChips(f).length ? 'Rimuovi filtri' : 'Vedi disponibilità',
     });
@@ -726,7 +726,7 @@ export function viewIndisponibilita(root, ctx) {
       }
       out.push([x.clone, x.tipologia, x.produzione, x.varieta, x.portainnesto, x.mag, x.ord, -x.deficit]);
     }
-    U.exportCSV(`indisponibilita_${U.nowStamp()}.csv`,
+    U.exportCSV(`mancanze_${U.nowStamp()}.csv`,
       ['Codice clone', 'Tipologia', 'Produzione', 'Codice varietà', 'Codice portainnesto',
        'Magazzino', 'Ordinato', 'Deficit'], out);
   });

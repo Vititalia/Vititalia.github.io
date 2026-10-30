@@ -128,7 +128,7 @@ Legend: **E** = enter/edit · **R** = read · **R\*** = read, aggregated totals 
 | S-02/S-03 Dashboard | R | R | R | R |
 | S-04/S-05 Riepilogo disponibilità | R | R | R | R |
 | S-06/S-07 Riepilogo per produttore | R | R | — | — |
-| S-08/S-09 Indisponibilità | R | R | R | — |
+| S-08/S-09 Mancanze (indisponibilità) | R | R | R | — |
 | S-23 Messo a disposizione | — | — | R | — |
 | S-13 Lotti magazzino | E | E | — | — |
 | S-14 Ordini e impegni | E | E | — | — |
@@ -318,7 +318,7 @@ Null-dimension handling
 | Totals | one row with the count of commitments and the summed quantity |
 | Devices | **Also on a phone** — not PC-gated like the entry screens |
 
-**Report 3 — Indisponibilità** (Admin, Amministrazione, Produttore)
+**Report 3 — Mancanze** (Admin, Amministrazione, Produttore) — *named «Indisponibilità» until PD-11*
 
 | Aspect | Specification |
 |---|---|
@@ -1524,6 +1524,7 @@ Status after reconciling `docs/db-schema.sql`.
 
 | # | Decision | Rationale | Effect |
 |---|---|---|---|
+| **PD-11** | The shortage report is called **«Mancanze»** in the menu, on the Panoramica («In mancanze») and on its own page; the subtitle keeps «combinazioni in deficit» | «Indisponibilità» described a state of the *warehouse*; the office asks «cosa manca?» — the new label reads as a question in the panorama tiles and matches how the shortage list is discussed in the warehouse | Labels only: the route `#/r/indisponibilita`, the capability key and the CSV content are unchanged (the exported file is called `mancanze_…csv`) |
 | **PD-10** | **Data entry writes to the database** — the entry screens (lots, orders, import, anagrafiche) no longer stop at a «read-only» notice: they call PostgREST directly and the database decides, through the `staff_write` RLS policies and the existing validation triggers | The app is used on the real warehouse, so recording a delivery had to happen in the app rather than in the Supabase table editor. Keeping the check in the policies (not in the browser) means the same rules already verified for the reports also hold for writes, and the demo backend keeps working through the same API | Supersedes the read-only notice of S-13/S-14/S-15/S-16/S-17; no schema change needed |
 | **PD-9** | **Passwords are self-service and settable**: the Profilo screen lets a signed-in user change their own password by giving the current one, and the *Utenti* sheet lets staff either generate a one-time password or **type one themselves** (RPC `set_user_password`, staff-checked) | Until now only a generated password existed, so a person who forgot theirs had to ask an administrator, and an administrator could not set a password the office had already agreed on. Requiring the current password for self-service keeps a stolen session from locking the owner out, and keeping the check inside the database means the browser cannot grant itself the right to change someone else's credentials | Adds migration 006 and the Profilo *Password* card |
 | **PD-8** | **The one-time password can be e-mailed by an Edge Function** (`send-credentials`), which the *Utenti* screen calls with the administrator's own token; the function re-uses the same staff-checked RPCs and sends the mail through a provider key kept as a function secret. Fully optional: without it, the panel keeps the copy/link behaviour | Mailing the password from a static page is impossible without the secret key, and e-mailing it from the browser would need that key in the bundle. A function keeps the check in the database, removes the copy-by-hand step the office complained about, and still degrades to the old flow when it is not deployed | Adds `supabase/functions/send-credentials`; see its README for the two secrets and the `EMAIL_CREDENTIALS` flag in `js/config.js` |

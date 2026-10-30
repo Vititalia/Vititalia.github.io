@@ -146,7 +146,7 @@ const CASES = [
   ['admin', '#/home', ['Disponibilità totale', 'Riepiloghi', 'da dove vuoi iniziare']],
   ['admin', '#/r/disponibilita', ['Riepilogo disponibilità', 'Totale generale', 'Codice portainnesto', 'Totale per portainnesto']],
   ['admin', '#/r/produttore', ['Riepilogo per produttore', 'Mori Marco', 'Disponibilità']],
-  ['admin', '#/r/indisponibilita', ['Indisponibilità', 'Deficit']],
+  ['admin', '#/r/indisponibilita', ['Mancanze', 'Deficit']],
   ['admin', '#/dati/lotti', ['Lotti magazzino', 'Nuovo lotto']],
   ['admin', '#/dati/ordini', ['Ordini e impegni', 'Segna spedito']],
   ['admin', '#/dati/import', ['Import CSV', 'Destinazione']],
@@ -162,7 +162,7 @@ const CASES = [
   ['ufficio', '#/dati/lotti', ['Lotti magazzino']],
   ['produttore', '#/home', ['Disponibilità totale']],
   ['produttore', '#/r/disponibilita', ['Riepilogo disponibilità']],
-  ['produttore', '#/r/indisponibilita', ['Indisponibilità']],
+  ['produttore', '#/r/indisponibilita', ['Mancanze']],
   ['produttore', '#/r/produttore', ['Non hai i permessi']],
   ['produttore', '#/dati/lotti', ['Non hai i permessi']],
   ['vendite', '#/r/indisponibilita', ['Non hai i permessi']],
@@ -187,11 +187,11 @@ desktop = true;
 /* ---------------- home launcher ---------------- */
 {
   const expected = {
-    admin: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Da spedire', 'Lotti magazzino',
+    admin: ['Disponibilità', 'Per produttore', 'Mancanze', 'Da spedire', 'Lotti magazzino',
             'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Utenti', 'Ruoli e permessi', 'Profilo'],
-    ufficio: ['Disponibilità', 'Per produttore', 'Indisponibilità', 'Da spedire', 'Lotti magazzino',
+    ufficio: ['Disponibilità', 'Per produttore', 'Mancanze', 'Da spedire', 'Lotti magazzino',
               'Ordini e impegni', 'Import CSV', 'Vite', 'Portainnesti', 'Utenti', 'Profilo'],
-    produttore: ['Disponibilità', 'Indisponibilità', 'Messo a disposizione', 'Profilo'],
+    produttore: ['Disponibilità', 'Mancanze', 'Messo a disposizione', 'Profilo'],
     vendite: ['Disponibilità', 'Profilo'],
   };
   for (const [role, titles] of Object.entries(expected)) {
@@ -552,7 +552,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   let homeText = text();
   ok(![...document.querySelectorAll('.grid thead th')].some((t) => /Produttore/.test(t.textContent)),
      'vendite: no producer column in «ultimi lotti»');
-  ok(!homeText.includes('In indisponibilità'), 'vendite: no shortage summary box');
+  ok(!homeText.includes('In mancanze'), 'vendite: no shortage summary box');
   ok(!homeText.includes('Da spedire'), 'vendite: no «da spedire» summary box');
   ok(homeText.includes('Disponibilità totale'), 'vendite: availability KPI still there');
 
@@ -567,7 +567,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   homeText = text();
   ok(![...document.querySelectorAll('.grid thead th')].some((t) => /Produttore/.test(t.textContent)),
      'produttore: no producer column in «ultimi lotti»');
-  ok(homeText.includes('In indisponibilità'), 'produttore: keeps the shortage box');
+  ok(homeText.includes('In mancanze'), 'produttore: keeps the shortage box');
   await go('#/profilo');
   prof = text();
   ok(!prof.includes('Account registrati'), 'produttore: other users are not listed');

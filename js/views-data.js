@@ -407,7 +407,7 @@ function openOrdineForm(ctx, existing) {
         if (!data.varieta || !data.clone || !data.quantita) { box.innerHTML = ''; return; }
         const { before, after } = S.availabilityImpact(data);
         box.innerHTML = after < 0
-          ? `<div class="banner banner-warn"><span aria-hidden="true">⚠</span><span>Disponibilità andrà sotto zero: da ${U.fmtSigned(before)} a <b>${U.fmtSigned(after)}</b>. Verrà segnalata in Indisponibilità.</span></div>`
+          ? `<div class="banner banner-warn"><span aria-hidden="true">⚠</span><span>Disponibilità andrà sotto zero: da ${U.fmtSigned(before)} a <b>${U.fmtSigned(after)}</b>. Verrà segnalata in Mancanze.</span></div>`
           : '';
       }
       async function submit() {

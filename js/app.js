@@ -15,7 +15,7 @@ const ROUTES = [
   { re: /^\/home$/, view: R.viewHome, cap: 'home', title: 'Panoramica', crumb: 'Fede Magazzino' },
   { re: /^\/r\/disponibilita$/, view: R.viewDisponibilita, cap: 'r.disponibilita', title: 'Riepilogo disponibilità', crumb: 'Riepiloghi / Disponibilità' },
   { re: /^\/r\/produttore$/, view: R.viewPerProduttore, cap: 'r.produttore', title: 'Riepilogo per produttore', crumb: 'Riepiloghi / Per produttore' },
-  { re: /^\/r\/indisponibilita$/, view: R.viewIndisponibilita, cap: 'r.indisponibilita', title: 'Indisponibilità', crumb: 'Riepiloghi / Indisponibilità' },
+  { re: /^\/r\/indisponibilita$/, view: R.viewIndisponibilita, cap: 'r.indisponibilita', title: 'Mancanze', crumb: 'Riepiloghi / Mancanze' },
   { re: /^\/r\/daspedire$/, view: R.viewDaSpedire, cap: 'r.daspedire', title: 'Da spedire', crumb: 'Riepiloghi / Da spedire' },
   { re: /^\/r\/messodisposizione$/, view: R.viewMessoADisposizione, cap: 'r.messodisposizione', title: 'Messo a disposizione', crumb: 'Riepiloghi / Messo a disposizione' },
   { re: /^\/dati\/lotti$/, view: D.viewLotti, cap: 'dati.lotti', title: 'Lotti magazzino', crumb: 'Dati / Lotti magazzino', pcOnly: true },
