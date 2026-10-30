@@ -234,6 +234,12 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--danger
 .grid td.grower-hl{background:var(--brand-50)}
 .grid tr.negative td.grower-hl{background:var(--danger-50)}
 .grid tr.total td.grower-hl{background:var(--brand-50);box-shadow:inset 0 2px 0 var(--brand-500)}
+/* a row that only carries alternative-production stock (no Nuova produzione lot) */
+.grid tr.trow.alternative-only td{background:var(--canvas);color:var(--ink-700);font-style:italic}
+.grid tr.trow.alternative-only td.ident{color:var(--ink-900);font-style:normal}
+.grid tr.trow.alternative-only td.metric.disp{background:var(--canvas);color:var(--ink-700)}
+.grid tr.trow.alternative-only td .badge{margin-left:6px;font-style:normal}
+
 /* notes are free text: keep the column readable without letting one entry
    stretch the table, and let them wrap inside the phone card */
 .grid td.note-cell{max-width:190px;white-space:pre-wrap;overflow-wrap:anywhere;

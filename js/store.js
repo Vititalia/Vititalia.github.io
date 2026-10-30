@@ -317,7 +317,8 @@ export const subtotalKey = (r) =>
 const byRootstock = (C) => (a, b) =>
   C.compare(a.portainnesto, b.portainnesto) ||
   C.compare(a.varieta, b.varieta) ||
-  C.compare(a.clone, b.clone);
+  C.compare(a.clone, b.clone) ||
+  (a.alternativeOnly ? 1 : 0) - (b.alternativeOnly ? 1 : 0);
 
 /* The availability report shows, next to the «Nuova produzione» numbers, how much
  * of the same *lot reference* is available as replanted / fridge-stored material.
@@ -345,41 +346,47 @@ function alternativeSeries(filters) {
     (!f.varieta || r.varieta === f.varieta) &&
     (!f.portainnesto || r.portainnesto === f.portainnesto);
 
-  const out = new Map();     // combination → { ripiantato, frigoconservato }
+  const matched = new Map();   // combination → { ripiantato, frigoconservato }
+  const orphan = new Map();    // combination → same shape, no «Nuova produzione» reference
+  const blank = () => ({ ripiantato: 0, frigoconservato: 0 });
+  const add = (map, key, field, value) => {
+    if (!map.has(key)) map.set(key, blank());
+    map.get(key)[field] += value;
+  };
 
-  /* live roles: the view already sums over the reference lots */
+  /* live roles: the view says which half each row belongs to */
   if (store.mode === 'supabase' && store.remote) {
     for (const r of store.remote.alternative || []) {
       const row = {
         tipologia: r.tipologia || NON_INDICATA, varieta: r.codice_varieta,
-        clone: r.codice_clone, portainnesto: r.codice_portainnesto,
-        produzione: r.produzione,
+        clone: r.codice_clone, portainnesto: r.codice_portainnesto, produzione: r.produzione,
       };
       const field = ALT_FIELDS[row.produzione];
       if (!field || !sideOk(row)) continue;
-      const k = comboKey(row);
-      if (!out.has(k)) out.set(k, { ripiantato: 0, frigoconservato: 0 });
-      out.get(k)[field] += Number(r.disponibilita || 0);
+      const hasRef = r.ha_riferimento !== false;   // old view (no column) → matched
+      add(hasRef ? matched : orphan, comboKey(row), field, Number(r.disponibilita || 0));
     }
-    return out;
+    return { matched, orphan };
   }
 
-  /* engine: reference keys (the «Nuova produzione» lots) and the available stock */
-  const refs = new Map();    // combination → Set(altKey)
-  const avail = new Map();   // altKey → { ripiantato, frigoconservato }
+  /* engine: reference keys of «Nuova produzione» and the alternative stock */
+  const refs = new Set();      // altKey of every «Nuova produzione» lot reference
+  const refsByCombo = new Map();
+  const avail = new Map();     // altKey → { ripiantato, frigoconservato }
   const bump = (key, produzione, delta) => {
     const field = ALT_FIELDS[produzione];
     if (!field) return;
-    if (!avail.has(key)) avail.set(key, { ripiantato: 0, frigoconservato: 0 });
+    if (!avail.has(key)) avail.set(key, blank());
     avail.get(key)[field] += delta;
   };
 
   for (const l of store.lotti) {
-    if ((l.produzione || NON_INDICATA) === 'Nuova produzione' && sideOk(l)) {
-      const k = comboKey(l);
-      if (!refs.has(k)) refs.set(k, new Set());
-      refs.get(k).add(altKey(l, l.produttore, l.anno));
-    }
+    if ((l.produzione || NON_INDICATA) !== 'Nuova produzione' || !sideOk(l)) continue;
+    const k = altKey(l, l.produttore, l.anno);
+    const ck = comboKey(l);
+    refs.add(k);
+    if (!refsByCombo.has(ck)) refsByCombo.set(ck, new Set());
+    refsByCombo.get(ck).add(k);
   }
   for (const l of store.lotti) {
     const produzione = l.produzione || NON_INDICATA;
@@ -390,20 +397,21 @@ function alternativeSeries(filters) {
     const produzione = o.produzione || NON_INDICATA;
     if (!ALT_FIELDS[produzione] || !sideOk(o)) continue;
     const lot = o.id_magazzino ? store.index.lotById.get(o.id_magazzino) : null;
-    if (!lot) continue;      // without a lot the commitment cannot be joined
+    if (!lot) continue;        // without a lot the commitment cannot be joined
     bump(altKey(o, lot.produttore, lot.anno), produzione, -Number(o.quantita || 0));
   }
-  for (const [k, keys] of refs) {
-    const sum = { ripiantato: 0, frigoconservato: 0 };
-    for (const key of keys) {
-      const a = avail.get(key);
-      if (!a) continue;
-      sum.ripiantato += a.ripiantato;
-      sum.frigoconservato += a.frigoconservato;
+
+  for (const [key, amounts] of avail) {
+    const combo = key.split('\u0001').slice(0, 4).join('\u0001');
+    if (refs.has(key)) {
+      // the reference exists: the quantity belongs to that combination's row
+      for (const field of EXTRA_KEYS) add(matched, combo, field, amounts[field]);
+    } else {
+      // no «Nuova produzione» reference: it becomes a row of its own
+      for (const field of EXTRA_KEYS) add(orphan, combo, field, amounts[field]);
     }
-    out.set(k, sum);
   }
-  return out;
+  return { matched, orphan };
 }
 
 /** One subtotal per (tipologia, produzione, varietà, portainnesto). */
@@ -437,15 +445,20 @@ function grandTotals(rows) {
  * The rootstock is a *filter* and a column, not a grouping level: there are no
  * per-rootstock subtotals, only one grand total.
  */
-export function reportDisponibilita(filters) {
+export function reportDisponibilita(filters, opts = {}) {
   // live backend: roles without table access get the aggregate view; staff (who can
   // read the tables) fall through to the shared engine below
-  if (store.mode === 'supabase' && store.remote) return reportFromView(filters);
+  if (store.mode === 'supabase' && store.remote) return reportFromView(filters, opts);
   const C = collator();
-  const extra = alternativeSeries(filters);
+  const { matched, orphan } = alternativeSeries(filters);
   const rows = [...metrics(filters).values()]
-    .map((r) => ({ ...r, ...(extra.get(comboKey(r)) || { ripiantato: 0, frigoconservato: 0 }) }))
-    .sort(byRootstock(C));
+    .map((r) => ({ ...r, ...(matched.get(comboKey(r)) || { ripiantato: 0, frigoconservato: 0 }) }));
+
+  // «Aggiungi altro» also brings the alternative stock whose lot reference has no
+  // «Nuova produzione» counterpart: a row of its own, with the four main columns at zero
+  if (opts.includeAlternativeRows) rows.push(...alternativeOnlyRows(orphan, filters));
+  rows.sort(byRootstock(C));
+
   return {
     rows,
     subtotals: rootstockSubtotals(rows),
@@ -453,6 +466,25 @@ export function reportDisponibilita(filters) {
     negativeCount: rows.filter((r) => r.disponibilita < 0).length,
     rowCount: rows.length,
   };
+}
+
+/** One row per combination that only exists as Ripiantato/Frigoconservato. */
+function alternativeOnlyRows(orphan, filters) {
+  const f = filters || {};
+  const out = [];
+  for (const [key, amounts] of orphan) {
+    const [tipologia, varieta, clone, portainnesto] = key.split('\u0001');
+    if (!amounts.ripiantato && !amounts.frigoconservato) continue;
+    out.push({
+      tipologia, produzione: f.produzione || 'Nuova produzione',
+      varieta, clone, portainnesto,
+      ...zero(),                      // magazzino / ordinato / spedito / disponibilità = 0
+      ripiantato: amounts.ripiantato,
+      frigoconservato: amounts.frigoconservato,
+      alternativeOnly: true,
+    });
+  }
+  return out;
 }
 
 /**
@@ -519,7 +551,7 @@ export function reportPerProduttore(filters, growerList) {
 }
 
 /* ---- supabase: report 1 from the aggregate view (roles without table access) ---- */
-function reportFromView(filters) {
+function reportFromView(filters, opts = {}) {
   const f = filters || {};
   const C = collator();
   const rows = (store.remote ? store.remote.rows : [])
@@ -540,9 +572,11 @@ function reportFromView(filters) {
     .sort(byRootstock(C));
 
   // the extra series come from the same view (all produzioni, side filters only)
-  const extra = alternativeSeries(f);
+  const { matched, orphan } = alternativeSeries(f);
   const withExtra = rows.map((r) => ({ ...r,
-    ...(extra.get(comboKey(r)) || { ripiantato: 0, frigoconservato: 0 }) }));
+    ...(matched.get(comboKey(r)) || { ripiantato: 0, frigoconservato: 0 }) }));
+  if (opts.includeAlternativeRows) withExtra.push(...alternativeOnlyRows(orphan, f));
+  withExtra.sort(byRootstock(C));
 
   return {
     rows: withExtra,

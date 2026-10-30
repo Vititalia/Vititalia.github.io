@@ -353,11 +353,15 @@ function subtotalRow(t, withExtra = true) {
 
 function cloneRow(row, withExtra = true) {
   const neg = row.disponibilita < 0;
+  const only = !!row.alternativeOnly;
+  const label = only
+    ? `<span class="badge badge-warn">solo ${U.fmtQty(row.ripiantato || 0) !== '0' ? 'Ripiantato' : 'Frigoconservato'}</span>`
+    : '';
   return {
     type: 'row',
-    cls: neg ? 'trow negative' : 'trow',
+    cls: `${neg ? 'trow negative' : 'trow'}${only ? ' alternative-only' : ''}`,
     cells: [
-      { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+      { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>${label}`, cls: 'ident' },
       { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
       U.metric('Magazzino', U.fmtQty(row.mag)),
       U.metric('Ordinato', U.fmtQty(row.ord)),
@@ -443,9 +447,9 @@ export function viewDisponibilita(root, ctx) {
   // the table always reads «Nuova produzione»: that is the baseline, and the two
   // optional columns carry the alternative produzioni (PD-18)
   const produzione = mandatoryDefaults().produzione;
-  const r = S.reportDisponibilita({ ...f, produzione });
   const table = wantsTableView(ctx);
   const extra = wantsExtraColumns(ctx);
+  const r = S.reportDisponibilita({ ...f, produzione }, { includeAlternativeRows: extra });
   reportShell(root, {
     eyebrow: 'Riepiloghi / Disponibilità',
     title: 'Riepilogo disponibilità',
@@ -472,7 +476,8 @@ export function viewDisponibilita(root, ctx) {
     host.innerHTML = `<div class="report${table ? ' table-mode' : ''}">${U.buildTable({
       scroll: table,
       caption: {
-        wide: `Quantità di ${U.esc(produzione)}: prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.`,
+        wide: `Quantità di ${U.esc(produzione)}: prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.`
+          + (extra ? ' Le righe contrassegnate «solo Ripiantato/Frigoconservato» non hanno un lotto di Nuova produzione con lo stesso riferimento.' : ''),
         narrow: `Quantità di ${U.esc(produzione)}: prima il totale del portainnesto, poi i cloni.`,
       },
       cols: extra ? [...AVAILABILITY_COLS, ...EXTRA_COLS] : AVAILABILITY_COLS,

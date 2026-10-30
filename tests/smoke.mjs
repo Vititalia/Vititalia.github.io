@@ -968,10 +968,44 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await go('#/r/disponibilita');
   ok(colsOf().includes('Ripiantato'), 'the choice is remembered across visits');
 
-  /* switching it off restores the six columns */
+  /* the alternative-only rows: present only while the extra columns are open */
+  const altRows = [...document.querySelectorAll('.grid tbody tr.alternative-only')];
+  ok(altRows.length > 0, `alternative-only rows appear with the columns (${altRows.length})`);
+  const alt = altRows.map((tr) => {
+    const tds = [...tr.querySelectorAll('td')];
+    return {
+      text: tr.textContent.replace(/\s+/g, ' ').trim(),
+      mag: tds[2]?.textContent.trim(),
+      ord: tds[3]?.textContent.trim(),
+      disp: tds[5]?.textContent.trim(),
+      rip: tds[6]?.textContent.trim(),
+      frigo: tds[7]?.textContent.trim(),
+    };
+  });
+  ok(alt.every((r) => r.mag === '0' && r.ord === '0' && r.disp === '0'),
+     `every alternative row has zeros in the main columns (${alt.map((r) => r.mag + '/' + r.ord + '/' + r.disp).join(', ')})`);
+  ok(alt.every((r) => (r.rip && r.rip !== '0') || (r.frigo && r.frigo !== '0')),
+     'and a value in at least one of the two new columns');
+  ok(alt.some((r) => /solo Ripiantato|solo Frigoconservato/.test(r.text)),
+     'the row is labelled as alternative-only');
+
+  /* the two columns now account for the whole alternative stock */
+  const S7 = await import('../js/store.js');
+  const allRip = S7.store.lotti.filter((l) => l.produzione === 'Ripiantato'
+    && l.tipologia === 'Barbatelle innestate').reduce((a, l) => a + l.quantita, 0);
+  const totalCell = [...document.querySelectorAll('.grid tbody tr.total')].pop()
+    .querySelectorAll('td');
+  const shownTotal = totalCell[totalCell.length - 2].textContent.trim();
+  const expected = String(allRip).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  ok(shownTotal === expected,
+     `the grand total now covers all the Ripiantato stock (${shownTotal} of ${expected})`);
+
+  /* switching it off restores the six columns and removes the rows */
   document.getElementById('extraBtn').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  await wait(120);
+  await wait(160);
   ok(!colsOf().includes('Ripiantato'), 'pressing it again hides them');
+  ok(document.querySelectorAll('.grid tbody tr.alternative-only').length === 0,
+     'and the alternative-only rows disappear with them');
   function btn2(node) { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); }
 }
 

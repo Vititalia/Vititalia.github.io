@@ -268,6 +268,41 @@ ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need
   }
 }
 
+/* ---------- report 1: the alternative-only rows (v1.0.3) ---------- */
+{
+  const f = { tipologia: 'Barbatelle innestate', produzione: 'Nuova produzione' };
+  const plain = reportDisponibilita(f);
+  const withAlt = reportDisponibilita(f, { includeAlternativeRows: true });
+  ok(!plain.rows.some((r) => r.alternativeOnly), 'the extra rows stay out by default');
+  const alt = withAlt.rows.filter((r) => r.alternativeOnly);
+  ok(alt.length > 0, `the extra rows appear on request (${alt.length})`);
+  ok(alt.every((r) => r.mag === 0 && r.ord === 0 && r.sped === 0 && r.disponibilita === 0),
+     'the four «Nuova produzione» columns are zero on those rows');
+  ok(alt.every((r) => r.ripiantato || r.frigoconservato),
+     'at least one of the two new columns carries a value');
+  ok(alt.every((r) => !plain.rows.some((p) => p.varieta === r.varieta && p.clone === r.clone
+    && p.portainnesto === r.portainnesto && p.alternativeOnly)),
+     'they never duplicate an existing alternative row');
+
+  // the two columns account for the whole alternative stock of the filters
+  const allRip = store.lotti.filter((l) => l.produzione === 'Ripiantato' && l.tipologia === f.tipologia)
+    .reduce((a, l) => a + l.quantita, 0);
+  const allFrigo = store.lotti.filter((l) => l.produzione === 'Frigoconservato' && l.tipologia === f.tipologia)
+    .reduce((a, l) => a + l.quantita, 0);
+  near(withAlt.totals.ripiantato, allRip, 'the total now equals the whole Ripiantato stock');
+  near(withAlt.totals.frigoconservato, allFrigo, 'same for Frigoconservato');
+  ok(plain.totals.ripiantato < withAlt.totals.ripiantato,
+     'without the extra rows the total only covers the matched references');
+  near(withAlt.subtotals.size, new Set(withAlt.rows.map((r) => subtotalKey(r))).size,
+    'the subtotals still follow the groups');
+
+  // the combination's own row comes before its alternative-only row
+  const indexes = withAlt.rows.map((r, i) => (r.alternativeOnly ? i : -1)).filter((i) => i >= 0);
+  ok(indexes.every((i) => i === 0 || !withAlt.rows[i - 1].alternativeOnly
+     || subtotalKey(withAlt.rows[i - 1]) !== subtotalKey(withAlt.rows[i])),
+     'a group never holds two alternative-only rows in a row');
+}
+
 /* ---------- filters ---------- */
 const varieta = store.index.varieta.find((v) => store.lotti.some((l) => l.varieta === v));
 const f1 = reportDisponibilita({ varieta });

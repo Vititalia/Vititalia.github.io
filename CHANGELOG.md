@@ -3,6 +3,21 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 21. Alternative stock without a reference gets its own row
+
+When «Aggiungi altro» is pressed the report now also shows the alternative stock
+whose lot reference has **no** «Nuova produzione» counterpart: one extra row per
+combination, with **Magazzino / Ordinato / Di cui spedito / Disponibilità at
+zero** and the two new columns filled, labelled *solo Ripiantato* (or
+*Frigoconservato*) and rendered in a muted style. The rows belong to their group,
+so the per-rootstock subtotals and the grand total include them: the two columns
+now total the **whole** alternative stock of the filtered set (with the reference
+match alone, only a fraction was visible). With the columns closed the table is
+exactly as before.
+
+The view was recreated (migration 008) to say which rows have a reference, so
+produttore and vendite see the same extra rows.
+
 ## 20. Disponibilità: no «Produzione» filter, and the two alternative columns follow the lot reference
 
 * The **Produzione filter is gone** from the availability report: the table always
