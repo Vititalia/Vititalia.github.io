@@ -3,6 +3,13 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 22. Mancanze: a grand total at the foot of the sheet
+
+The shortage report closes with a **«Totale generale»** row — Magazzino, Ordinato
+and the summed Deficit, with the article count — exactly like the availability
+report. The CSV gains the same closing line. Comparing the whole deficit with the
+stock no longer means reading the banner.
+
 ## 21. Alternative stock without a reference gets its own row
 
 When «Aggiungi altro» is pressed the report now also shows the alternative stock

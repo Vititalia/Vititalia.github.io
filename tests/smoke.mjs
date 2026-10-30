@@ -326,15 +326,27 @@ desktop = true;
     ok(!/SS/.test(seq), `${label}: no two subtotals in a row — every group has its cloni`);
     ok(groups(rows) === 0, `${label}: every clone row follows its own subtotal`);
     const lastRow = [...document.querySelectorAll('.grid tbody tr')].pop();
-    // report 3 has no grand total (the deficit banner carries it), the others do
-    ok(hash === '#/r/indisponibilita'
-      ? lastRow.classList.contains('trow')
-      : lastRow.classList.contains('total'),
-      `${label}: the table ends with ${hash === '#/r/indisponibilita' ? 'a clone row' : 'the grand total'}`);
+    ok(lastRow.classList.contains('total'),
+       `${label}: the table ends with the «Totale generale» row`);
   }
   /* the shortage report offers both optional filters (variety and rootstock) */
+  await go('#/r/indisponibilita');
   ok(!!document.querySelector('#filterHost [id$="-combo"] input'), 'mancanze: variety filter present');
   ok(!!document.querySelector('#filterHost [id$="-root"] input'), 'mancanze: rootstock filter present');
+
+  /* the «Totale generale» row at the foot of the mancanze sheet */
+  const totalRow = [...document.querySelectorAll('.grid tbody tr.total')].pop();
+  const totalCells = [...totalRow.querySelectorAll('td')].map((td) => td.textContent.trim());
+  const S8 = await import('../js/store.js');
+  const U8 = await import('../js/ui.js');
+  const rm = S8.reportIndisponibilita({});
+  ok(totalCells[0] === 'Totale generale', `mancanze: the last row is the grand total (${totalCells[0]})`);
+  ok(totalCells[4] === U8.fmtQty(rm.totals.mag) && totalCells[5] === U8.fmtQty(rm.totals.ord)
+     && totalCells[6] === '\u2212' + U8.fmtQty(rm.totals.deficit),
+     `mancanze: the total row carries magazzino, ordinato and deficit (${totalCells.slice(4).join(' / ')})`);
+  ok(rm.totals.mag + rm.totals.deficit === rm.totals.ord,
+     'mancanze: ordinato = magazzino + deficit on the total');
+  ok(totalCells[3].includes(String(rm.count)), `mancanze: the total names the article count (${totalCells[3]})`);
 
   /* the deficit subtotal is the sum of its group, shown as a negative number */
   await go('#/r/indisponibilita');

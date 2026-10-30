@@ -160,6 +160,9 @@ ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need
   }
   near(sumDef, r3.deficitTot, 'report 3: the subtotals add up to the total deficit');
   near(sumDef, sumOrd - sumMag, 'report 3: total deficit = ordinato - magazzino');
+  ok(r3.totals && r3.totals.mag === sumMag && r3.totals.ord === sumOrd && r3.totals.deficit === sumDef,
+     'report 3 carries the grand totals for the foot of the sheet');
+  near(r3.totals.mag + r3.totals.deficit, r3.totals.ord, 'report 3: ordinato = magazzino + deficit');
 }
 
 /* ---------- report 5: messo a disposizione (one producer) ---------- */

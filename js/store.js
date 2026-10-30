@@ -684,8 +684,13 @@ export function reportIndisponibilita(filters) {
     const t = subtotals.get(k);
     t.count += 1; t.mag += r.mag; t.ord += r.ord; t.deficit += r.deficit;
   }
+  const totalMag = rows.reduce((s2, r) => s2 + r.mag, 0);
+  const totalOrd = rows.reduce((s2, r) => s2 + r.ord, 0);
   const deficitTot = rows.reduce((s2, r) => s2 + r.deficit, 0);
-  return { rows, subtotals, count: rows.length, deficitTot };
+  return {
+    rows, subtotals, count: rows.length, deficitTot,
+    totals: { mag: totalMag, ord: totalOrd, deficit: deficitTot },
+  };
 }
 
 /** Report 4 — commitments still to be shipped (spedito = false). */

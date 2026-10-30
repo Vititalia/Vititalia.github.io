@@ -821,6 +821,21 @@ export function viewIndisponibilita(root, ctx) {
     });
   }
 
+  // «Totale generale» at the foot of the sheet, like the availability report
+  const t = r.totals;
+  rows.push({
+    type: 'total',
+    cells: [
+      { html: 'Totale generale', cls: 'ident' },
+      { html: '', label: 'Tipologia', cls: 'ctx' },
+      { html: '', label: 'Produzione', cls: 'ctx' },
+      { html: `${r.count} articoli`, label: 'Portainnesto', cls: 'cell-sub' },
+      { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Magazzino' },
+      { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
+      { html: `<span class="neg">\u2212${U.fmtQty(t.deficit)}</span>`, cls: 'r metric', label: 'Deficit' },
+    ],
+  });
+
   host.innerHTML = `
     <div class="banner banner-error"><span aria-hidden="true">⚠</span>
       <span><b>${r.count} articoli</b> con disponibilità negativa · deficit totale <b>${U.fmtQty(r.deficitTot)}</b></span></div>
@@ -848,6 +863,7 @@ export function viewIndisponibilita(root, ctx) {
       }
       out.push([x.tipologia, x.produzione, x.varieta, x.clone, x.portainnesto, x.mag, x.ord, -x.deficit]);
     }
+    out.push(['Totale generale', '', '', '', '', r.totals.mag, r.totals.ord, -r.totals.deficit]);
     U.exportCSV(`mancanze_${U.nowStamp()}.csv`,
       ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone', 'Codice portainnesto',
        'Magazzino', 'Ordinato', 'Deficit'], out);
