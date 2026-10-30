@@ -782,6 +782,43 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(withDots > 0, `report cells use the separator (${withDots} cells)`);
 }
 
+/* ---------------- every export uses Tipologia; Produzione; Varietà; Clone; Portainnesto ---------------- */
+{
+  const captured = [];
+  window.URL.createObjectURL = (blob) => { captured.push(blob); return 'blob:stub'; };
+  window.URL.revokeObjectURL = () => {};
+  const tapEl2 = (node) => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const head = async () => {
+    const last = captured[captured.length - 1];
+    const text = last ? await last.text() : '';
+    return { header: text.split('\r\n')[0].replace(/^\ufeff/, ''), text };
+  };
+
+  await loginAs('admin');
+  for (const [hash, expect, label] of [
+    ['#/r/disponibilita', 'Tipologia;Produzione;Codice varietà;Codice clone;Codice portainnesto', 'disponibilità'],
+    ['#/r/produttore', 'Tipologia;Produzione;Codice varietà;Codice clone;Codice portainnesto', 'per produttore'],
+    ['#/r/indisponibilita', 'Tipologia;Produzione;Codice varietà;Codice clone;Codice portainnesto', 'mancanze'],
+    ['#/r/daspedire', 'Tipologia;Produzione;Codice varietà;Codice clone;Codice portainnesto', 'da spedire'],
+  ]) {
+    await go(hash);
+    if (document.getElementById('exportBtn').disabled) { ok(true, `${label}: export disabled with no rows`); continue; }
+    tapEl2(document.getElementById('exportBtn'));
+    await wait(40);
+    const { header } = await head();
+    ok(header.startsWith(expect), `${label}: export columns in the standard order (${header.slice(0, 70)}…)`);
+  }
+
+  /* the producer report is reachable only as a producer */
+  await loginAs('produttore');
+  await go('#/r/messodisposizione');
+  tapEl2(document.getElementById('exportBtn'));
+  await wait(40);
+  const messo = await head();
+  ok(messo.header.startsWith('Tipologia;Produzione;Codice varietà;Codice clone;Codice portainnesto;Messo a disposizione;Spedito;A magazzino'),
+     `messo: export columns (${messo.header})`);
+}
+
 /* ---------------- the async write API the screens use (demo backend) ---------------- */
 {
   const S4 = await import('../js/store.js');

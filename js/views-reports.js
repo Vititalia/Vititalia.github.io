@@ -384,12 +384,15 @@ function availabilityCsvRows(r) {
   for (const row of r.rows) {
     if (grpKey(row) !== prev) {
       const t = r.subtotals.get(grpKey(row));
-      out.push(['Totale per portainnesto', '', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
+      out.push(['Totale per portainnesto', t.tipologia, t.produzione, t.varieta, '', t.portainnesto,
+                t.mag, t.ord, t.sped, t.disponibilita]);
       prev = grpKey(row);
     }
-    out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped, row.disponibilita]);
+    out.push([row.tipologia, row.produzione, row.varieta, row.clone, row.portainnesto,
+              row.mag, row.ord, row.sped, row.disponibilita]);
   }
-  out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita]);
+  out.push(['Totale generale', '', '', '', '', '',
+            r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita]);
   return out;
 }
 
@@ -397,8 +400,10 @@ const AVAILABILITY_COLS = [{ label: 'Codice clone' }, { label: 'Codice portainne
   { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
   { label: 'Di cui spedito', align: 'r' }, { label: 'Disponibilità', align: 'r' }];
 
-const AVAILABILITY_CSV_HEADERS = ['Codice clone', 'Codice varietà', 'Codice portainnesto',
-  'Magazzino', 'Ordinato', 'Di cui spedito', 'Disponibilità'];
+/* Every export follows the same dimension order (PD-14):
+ * Tipologia; Produzione; Codice varietà; Codice clone; Codice portainnesto; measures */
+const AVAILABILITY_CSV_HEADERS = ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone',
+  'Codice portainnesto', 'Magazzino', 'Ordinato', 'Di cui spedito', 'Disponibilità'];
 
 export function viewDisponibilita(root, ctx) {
   const f = parseFilters(ctx.params, { mandatory: true });
@@ -445,8 +450,8 @@ const MESSO_COLS = [{ label: 'Codice clone' }, { label: 'Codice portainnesto' },
   { label: 'Messo a disposizione', align: 'r' }, { label: 'Spedito', align: 'r' },
   { label: 'A magazzino', align: 'r' }];
 
-const MESSO_CSV_HEADERS = ['Codice clone', 'Codice portainnesto',
-  'Messo a disposizione', 'Spedito', 'A magazzino'];
+const MESSO_CSV_HEADERS = ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone',
+  'Codice portainnesto', 'Messo a disposizione', 'Spedito', 'A magazzino'];
 
 function messoAggregateRow(t, type) {
   return {
@@ -550,12 +555,14 @@ export function viewMessoADisposizione(root, ctx) {
     for (const row of r.rows) {
       if (grpKey(row) !== prev) {
         const t = r.subtotals.get(grpKey(row));
-        out.push(['Totale per portainnesto', t.portainnesto, t.mag, t.sped, t.disponibilita]);
+        out.push(['Totale per portainnesto', t.tipologia, t.produzione, t.varieta, '', t.portainnesto,
+                  t.mag, t.sped, t.disponibilita]);
         prev = grpKey(row);
       }
-      out.push([row.clone, row.portainnesto, row.mag, row.sped, row.disponibilita]);
+      out.push([row.tipologia, row.produzione, row.varieta, row.clone, row.portainnesto,
+                row.mag, row.sped, row.disponibilita]);
     }
-    out.push(['Totale generale', '', r.totals.mag, r.totals.sped, r.totals.disponibilita]);
+    out.push(['Totale generale', '', '', '', '', '', r.totals.mag, r.totals.sped, r.totals.disponibilita]);
     U.exportCSV(`messo_a_disposizione_${U.nowStamp()}.csv`, MESSO_CSV_HEADERS, out);
   });
 }
@@ -683,18 +690,18 @@ export function viewPerProduttore(root, ctx) {
     for (const row of r.rows) {
       if (grpKey(row) !== prevRoot) {
         const t = r.subtotals.get(grpKey(row));
-        out.push(['Totale per portainnesto', '', t.portainnesto, t.mag, t.ord, t.sped,
-          t.disponibilita, ...r.growers.map((g) => t.per[g])]);
+        out.push(['Totale per portainnesto', t.tipologia, t.produzione, t.varieta, '', t.portainnesto,
+          t.mag, t.ord, t.sped, t.disponibilita, ...r.growers.map((g) => t.per[g])]);
         prevRoot = grpKey(row);
       }
-      out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped,
-        row.disponibilita, ...r.growers.map((g) => row.per[g])]);
+      out.push([row.tipologia, row.produzione, row.varieta, row.clone, row.portainnesto,
+        row.mag, row.ord, row.sped, row.disponibilita, ...r.growers.map((g) => row.per[g])]);
     }
-    out.push(['Totale generale', '', '', r.totals.mag, r.totals.ord, r.totals.sped,
+    out.push(['Totale generale', '', '', '', '', '', r.totals.mag, r.totals.ord, r.totals.sped,
       r.totals.disponibilita, ...r.growers.map((g) => r.totals.per[g])]);
     U.exportCSV(`disponibilita_per_produttore_${U.nowStamp()}.csv`,
-      ['Codice clone', 'Codice varietà', 'Codice portainnesto', 'Magazzino', 'Ordinato',
-       'Di cui spedito', 'Disponibilità', ...r.growers], out);
+      ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone', 'Codice portainnesto',
+       'Magazzino', 'Ordinato', 'Di cui spedito', 'Disponibilità', ...r.growers], out);
   });
 }
 
@@ -782,13 +789,14 @@ export function viewIndisponibilita(root, ctx) {
     for (const x of r.rows) {
       if (grpKey(x) !== prevRoot) {
         const t = r.subtotals.get(grpKey(x));
-        out.push(['Totale per portainnesto', '', '', '', t.portainnesto, t.mag, t.ord, -t.deficit]);
+        out.push(['Totale per portainnesto', t.tipologia, t.produzione, t.varieta, '', t.portainnesto,
+                  t.mag, t.ord, -t.deficit]);
         prevRoot = grpKey(x);
       }
-      out.push([x.clone, x.tipologia, x.produzione, x.varieta, x.portainnesto, x.mag, x.ord, -x.deficit]);
+      out.push([x.tipologia, x.produzione, x.varieta, x.clone, x.portainnesto, x.mag, x.ord, -x.deficit]);
     }
     U.exportCSV(`mancanze_${U.nowStamp()}.csv`,
-      ['Codice clone', 'Tipologia', 'Produzione', 'Codice varietà', 'Codice portainnesto',
+      ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone', 'Codice portainnesto',
        'Magazzino', 'Ordinato', 'Deficit'], out);
   });
 }

@@ -23,6 +23,14 @@ produzione, year and note text, and it filters the list in place.
 Same reading order as the lots screen: variety first, then clone, then rootstock,
 then the producer of the linked lot (orders without a lot come last).
 
+## 10. Exports follow one column order: Tipologia; Produzione; Varietà; Clone; Portainnesto
+
+Every CSV now opens with the same five dimension columns, then its measures —
+including the per-grower report (which also gains tipologia and produzione) and
+the producer report. The variety/clone pair is no longer inverted anywhere, and
+subtotal lines carry tipologia, produzione and varietà too, so a spreadsheet
+pivot works without renaming anything.
+
 ## 11. Quantities always show the dot as thousands separator
 
 `1.234` instead of `1234`: the formatting helper now groups by hand, because the
