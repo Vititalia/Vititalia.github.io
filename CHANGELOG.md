@@ -3,6 +3,17 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## v1.0.0 — 2026-10-30
+
+First release in production at <https://vititalia.github.io/> (repository
+`Vititalia/Vititalia.github.io`, published from `main`). Signed off by the
+owner: real login, real database, data entry from the app, reports reviewed with
+the office.
+
+Rollback: `git checkout v1.0.0` to inspect, or redeploy it with
+`git push origin v1.0.0:main --force-with-lease` (Pages rebuilds in ~1 minute).
+The procedure is also in the README, under *Releases*.
+
 ## 4. «Messo a disposizione» — the producer's own three quantities
 
 The producer report now shows **Messo a disposizione** (the quantity that entered

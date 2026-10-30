@@ -193,6 +193,22 @@ git push origin main            # development branch = live site (~1 min build)
 No `gh-pages` branch, no Pages settings, no build step or CI (and the repository token used here
 cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
 
+### Releases
+
+The published version is tracked with git tags — **v1.0.0** is the first release in production
+(see [`CHANGELOG.md`](CHANGELOG.md)). To roll back to it:
+
+```bash
+git fetch --tags
+git checkout v1.0.0                    # inspect / run it locally
+git push origin v1.0.0:main --force-with-lease   # make the live site serve it again (~1 min)
+```
+
+`--force-with-lease` refuses if someone pushed in the meantime, so nothing is lost: the newer
+commits stay reachable from `main`'s previous position in the reflog and in the remote history
+until the next push. Prefer `git revert <sha>` when the goal is to undo a single change while
+keeping the rest.
+
 ## Known limitations / next steps
 
 - Writes go straight from the browser to PostgREST (`js/store.js`, `saveLotto`/`saveOrdine`/…), which
