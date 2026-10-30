@@ -114,6 +114,9 @@ main:focus{outline:none}
 .btn-secondary{border-color:var(--brand-600);color:var(--brand-600);background:var(--surface)}
 .btn-ghost{background:transparent;color:var(--ink-500)}
 .btn-del{color:var(--danger);font-weight:600}
+/* a toggle rendered as a button (the «Aggiungi altro» switch of the report) */
+.btn.is-on{background:var(--brand-600);color:#fff;border-color:var(--brand-600)}
+.btn.is-on:hover{background:var(--brand-700)}
 .btn-del:hover{background:var(--danger-50)}
 .btn-danger{background:var(--danger-600);color:#fff}
 .btn[disabled]{opacity:.55;cursor:not-allowed}

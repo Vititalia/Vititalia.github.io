@@ -248,7 +248,7 @@ for (const w of [1024, 1440, 1920]) {
       rows: t.querySelectorAll('tbody tr.trow').length,
     };
   });
-  ok(r.cols === 8, `report 1: 8 columns (the two extra series at the end) (${r.cols})`);
+  ok(r.cols === 6, `report 1: 6 columns by default (${r.cols})`);
   ok(r.groups === 0 && r.subs > 0, `report 1: no grouping but a subtotal per rootstock (${r.groups}/${r.subs})`);
   ok(r.totals === 1, `report 1: single grand-total row (${r.totals})`);
   ok(r.rootstockCells === r.rows, `report 1: every row carries its rootstock (${r.rootstockCells}/${r.rows})`);
@@ -728,7 +728,7 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   ok(table.rowDisplay === 'table-row' && table.tdDisplay === 'table-cell',
      `phone: the table really is a table (${table.rowDisplay}/${table.tdDisplay})`);
   ok(table.thead !== 'none', 'phone table mode: header row visible');
-  ok(table.cols === 8, `phone table mode: same columns as the web (${table.cols})`);
+  ok(table.cols === 6, `phone table mode: same columns as the web (${table.cols})`);
   ok(table.scrolls, 'phone table mode: the table scrolls inside its panel');
   ok(table.overflow <= 1, 'phone table mode: the page itself does not scroll sideways');
 
@@ -756,7 +756,7 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
 /* ------------------- subtotal first, notes, producer report ---------------- */
 {
   // report 1, per produttore: the subtotal opens the group (PD-7)
-  for (const [route, label, cells] of [['#/r/disponibilita', 'disponibilità', 8],
+  for (const [route, label, cells] of [['#/r/disponibilita', 'disponibilità', 6],
                                        ['#/r/indisponibilita', 'indisponibilità', 7],
                                        ['#/r/produttore', 'per produttore', 14]]) {
     const { page, ctx } = await open({ width: 1440, height: 1000 }, route);
@@ -838,6 +838,28 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
     ok(d.focused, `${label}: the search box keeps the focus after the automatic refresh`);
     ok(d.caret === 2 && d.value === 'CH', `${label}: caret and text preserved (${d.value} @ ${d.caret})`);
     ok(d.typedMore === 'CHA', `${label}: typing continues in the same box (${d.typedMore})`);
+    await ctx.close();
+  }
+}
+
+/* ---------------- «Aggiungi altro» on a PC and on a phone ---------------- */
+{
+  for (const [w, label] of [[1440, 'PC'], [390, 'phone']]) {
+    const { page, ctx } = await open({ width: w, height: 900 }, '#/r/disponibilita');
+    const colsOf = () => page.$$eval('.grid thead th', (t) => t.map((x) => x.textContent.trim()));
+    const before = await colsOf();
+    ok(before.length === 6 && !before.includes('Ripiantate'),
+       `${label}: six columns until «Aggiungi altro» is pressed (${before.length})`);
+    await page.click('#extraBtn');
+    await page.waitForTimeout(400);
+    const after = await colsOf();
+    ok(after.length === 8 && after.slice(-2).join('·') === 'Ripiantate·Frigoconservate',
+       `${label}: the two columns open (${after.join(' · ')})`);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    ok(overflow <= 1, `${label}: the page does not scroll sideways with them open (${overflow}px)`);
+    await page.click('#extraBtn');
+    await page.waitForTimeout(400);
+    ok((await colsOf()).length === 6, `${label}: pressing again closes them`);
     await ctx.close();
   }
 }

@@ -49,6 +49,14 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 18. The two columns are behind «Aggiungi altro»
+
+A new **«Aggiungi altro»** button in the report header opens *Ripiantate* and
+*Frigoconservate*; until it is pressed the availability table stays at its six
+columns. The button lights up when active, the choice is remembered in the
+browser (like the cards/table switch), and the CSV export follows it — with the
+columns open the file carries them too. Works the same on a phone.
+
 ## 17. Disponibilità gains «Ripiantate» and «Frigoconservate»
 
 After Disponibilità the table now carries the warehouse quantity of the same

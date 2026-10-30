@@ -243,9 +243,10 @@ desktop = true;
   ok(shape.groups === 0, `no rootstock grouping (${shape.groups})`);
   ok(shape.subtotals > 0, `a subtotal row per rootstock (${shape.subtotals})`);
   ok(shape.totals === 1, `one grand total (${shape.totals})`);
-  ok(shape.cols.length === 8, `8 columns (${shape.cols.length}: ${shape.cols.join(' · ')})`);
-  ok(shape.cols.slice(-2).join('·') === 'Ripiantate·Frigoconservate',
-     `the two extra series close the table (${shape.cols.slice(-2).join(' · ')})`);
+  ok(shape.cols.length === 6, `6 columns by default (${shape.cols.length}: ${shape.cols.join(' · ')})`);
+  ok(!!document.getElementById('extraBtn'), 'the «Aggiungi altro» button is in the header');
+  ok(document.getElementById('extraBtn').getAttribute('aria-pressed') === 'false',
+     'the extra columns start hidden');
   ok(!shape.cols.includes('Da spedire'), 'the «Da spedire» column is gone');
   ok(shape.filters.some((l) => l.includes('Codice portainnesto')), 'rootstock filter present');
   ok(shape.tipologiaOpts.length === 4 && shape.tipologiaOpts.every(Boolean),
@@ -901,6 +902,50 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   const withDots = [...document.querySelectorAll('.grid tbody td.metric')]
     .filter((td) => /\d\.\d{3}/.test(td.textContent)).length;
   ok(withDots > 0, `report cells use the separator (${withDots} cells)`);
+}
+
+/* ---------------- «Aggiungi altro» reveals the two extra columns ---------------- */
+{
+  await loginAs('admin');
+  await go('#/r/disponibilita');
+  const colsOf = () => [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
+  ok(!colsOf().includes('Ripiantate'), 'disponibilità: the extra columns are hidden by default');
+  const btn = document.getElementById('extraBtn');
+  ok(!!btn && btn.getAttribute('aria-pressed') === 'false', 'the button starts off');
+
+  btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(120);
+  const cols = colsOf();
+  ok(cols.includes('Ripiantate') && cols.includes('Frigoconservate'),
+     `pressing it opens the two columns (${cols.join(' · ')})`);
+  ok(cols.slice(-2).join('·') === 'Ripiantate·Frigoconservate', 'they close the table');
+  ok(document.getElementById('extraBtn').getAttribute('aria-pressed') === 'true', 'the button reports the state');
+
+  /* cells carry the numbers, and a subtotal row lines up with the header */
+  const rowCells = document.querySelectorAll('.grid tbody tr.trow')[0].querySelectorAll('td').length;
+  ok(rowCells === cols.length, `every row has a cell per column (${rowCells}/${cols.length})`);
+  const sub = document.querySelector('.grid tbody tr.subtotal');
+  ok(sub && sub.querySelectorAll('td').length === cols.length, 'the subtotal rows line up too');
+
+  /* the export follows the toggle */
+  const captured = [];
+  window.URL.createObjectURL = (blob) => { captured.push(blob); return 'blob:stub'; };
+  window.URL.revokeObjectURL = () => {};
+  btn2(document.getElementById('exportBtn'));
+  await wait(40);
+  const head = await captured[captured.length - 1].text();
+  ok(head.split('\r\n')[0].includes(';Ripiantate;Frigoconservate'), 'the CSV carries the two columns when open');
+
+  /* and the choice is remembered, so it stays on for the next visit */
+  await go('#/r/indisponibilita');
+  await go('#/r/disponibilita');
+  ok(colsOf().includes('Ripiantate'), 'the choice is remembered across visits');
+
+  /* switching it off restores the six columns */
+  document.getElementById('extraBtn').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(120);
+  ok(!colsOf().includes('Ripiantate'), 'pressing it again hides them');
+  function btn2(node) { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); }
 }
 
 /* ---------------- every export uses Tipologia; Produzione; Varietà; Clone; Portainnesto ---------------- */

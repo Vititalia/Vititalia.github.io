@@ -16,6 +16,18 @@ export function wantsTableView(ctx) {
 export function resetViewPreference() {
   try { localStorage.removeItem(VIEW_KEY); } catch { /* ignore */ }
 }
+
+/* ---------- «Aggiungi altro»: the two extra columns of the availability report ---------- */
+const EXTRA_KEY = 'vignero.extraCols.v1';
+export function wantsExtraColumns(ctx) {
+  const v = ctx.params ? ctx.params.get('extra') : null;
+  if (v === '1') { setExtraColumns(true); return true; }
+  if (v === '0') { setExtraColumns(false); return false; }
+  try { return localStorage.getItem(EXTRA_KEY) === '1'; } catch { return false; }
+}
+export function setExtraColumns(on) {
+  try { localStorage.setItem(EXTRA_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
 function viewToggle(ctx, table) {
   const base = ctx.params || new URLSearchParams();
   const href = (mode) => {
@@ -319,7 +331,7 @@ function reportShell(root, { eyebrow, title, sub, actions = '' }) {
 
 const grpKey = (r) => S.subtotalKey(r);
 
-function subtotalRow(t) {
+function subtotalRow(t, withExtra = true) {
   return {
     type: 'subtotal',
     cells: [
@@ -329,7 +341,7 @@ function subtotalRow(t) {
       { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
       { html: U.fmtQty(t.sped), cls: 'r metric', label: 'Di cui spedito' },
       { html: `<span class="${t.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(t.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
-      ...((t.ripiantate != null || t.frigoconservate != null) ? [
+      ...((withExtra && (t.ripiantate != null || t.frigoconservate != null)) ? [
         { html: U.fmtQty(t.ripiantate || 0), cls: 'r metric', label: 'Ripiantate' },
         { html: U.fmtQty(t.frigoconservate || 0), cls: 'r metric', label: 'Frigoconservate' },
       ] : []),
@@ -337,7 +349,7 @@ function subtotalRow(t) {
   };
 }
 
-function cloneRow(row) {
+function cloneRow(row, withExtra = true) {
   const neg = row.disponibilita < 0;
   return {
     type: 'row',
@@ -349,12 +361,12 @@ function cloneRow(row) {
       U.metric('Ordinato', U.fmtQty(row.ord)),
       U.metric('Di cui spedito', U.fmtQty(row.sped)),
       U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
-      ...(('ripiantate' in row) ? extraCells(row) : []),
+      ...((withExtra && ('ripiantate' in row)) ? extraCells(row) : []),
     ],
   };
 }
 
-function grandTotalRow(totals) {
+function grandTotalRow(totals, withExtra = true) {
   return {
     type: 'total',
     cells: [
@@ -364,7 +376,7 @@ function grandTotalRow(totals) {
       { html: U.fmtQty(totals.ord), cls: 'r metric', label: 'Ordinato' },
       { html: U.fmtQty(totals.sped), cls: 'r metric', label: 'Di cui spedito' },
       { html: `<span class="${totals.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(totals.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
-      ...((totals.ripiantate != null || totals.frigoconservate != null) ? [
+      ...((withExtra && (totals.ripiantate != null || totals.frigoconservate != null)) ? [
         { html: U.fmtQty(totals.ripiantate || 0), cls: 'r metric', label: 'Ripiantate' },
         { html: U.fmtQty(totals.frigoconservate || 0), cls: 'r metric', label: 'Frigoconservate' },
       ] : []),
@@ -373,17 +385,17 @@ function grandTotalRow(totals) {
 }
 
 /** Subtotal first, then its per-clone lines, and one grand total at the end. */
-function availabilityRows(r) {
+function availabilityRows(r, withExtra = true) {
   const out = [];
   let prev = null;
   for (const row of r.rows) {
     if (grpKey(row) !== prev) {
-      out.push(subtotalRow(r.subtotals.get(grpKey(row))));
+      out.push(subtotalRow(r.subtotals.get(grpKey(row)), withExtra));
       prev = grpKey(row);
     }
-    out.push(cloneRow(row));
+    out.push(cloneRow(row, withExtra));
   }
-  if (r.rows.length) out.push(grandTotalRow(r.totals));
+  if (r.rows.length) out.push(grandTotalRow(r.totals, withExtra));
   return out;
 }
 
@@ -428,11 +440,14 @@ export function viewDisponibilita(root, ctx) {
   const f = parseFilters(ctx.params, { mandatory: true });
   const r = S.reportDisponibilita(f);
   const table = wantsTableView(ctx);
+  const extra = wantsExtraColumns(ctx);
   reportShell(root, {
     eyebrow: 'Riepiloghi / Disponibilità',
     title: 'Riepilogo disponibilità',
     sub: `${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo`,
     actions: `${viewToggle(ctx, table)}
+      <button class="btn btn-secondary btn-sm${extra ? ' is-on' : ''}" type="button" id="extraBtn"
+              aria-pressed="${extra}" title="Mostra anche Ripiantate e Frigoconservate">Aggiungi altro</button>
       <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
   });
   filterBar(root.querySelector('#filterHost'), f,
@@ -454,14 +469,20 @@ export function viewDisponibilita(root, ctx) {
         wide: 'Prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.',
         narrow: 'Prima il totale del portainnesto, poi i cloni.',
       },
-      cols: [...AVAILABILITY_COLS, ...EXTRA_COLS],
-      rows: availabilityRows(r),
+      cols: extra ? [...AVAILABILITY_COLS, ...EXTRA_COLS] : AVAILABILITY_COLS,
+      rows: availabilityRows(r, extra),
     })}</div>`;
   }
 
+  root.querySelector('#extraBtn').addEventListener('click', () => {
+    setExtraColumns(!extra);
+    ctx.refresh();
+    U.toast(extra ? 'Colonne aggiuntive nascoste' : 'Ripiantate e Frigoconservate aggiunte alla tabella');
+  });
+
   root.querySelector('#exportBtn').addEventListener('click', () => {
-    U.exportCSV(`disponibilita_${U.nowStamp()}.csv`,
-      [...AVAILABILITY_CSV_HEADERS, ...AVAILABILITY_CSV_EXTRA], availabilityCsvRows(r, true));
+    const headers = extra ? [...AVAILABILITY_CSV_HEADERS, ...AVAILABILITY_CSV_EXTRA] : AVAILABILITY_CSV_HEADERS;
+    U.exportCSV(`disponibilita_${U.nowStamp()}.csv`, headers, availabilityCsvRows(r, extra));
   });
 }
 
