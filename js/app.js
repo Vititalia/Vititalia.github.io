@@ -3,6 +3,7 @@ import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
 import * as A from './auth.js';
+import { APP_VERSION } from './config.js';
 import * as R from './views-reports.js';
 import * as D from './views-data.js';
 
@@ -193,6 +194,8 @@ export function render() {
 
 /* ------------------------------------------------------------------ boot */
 async function boot() {
+  window.__VIGNERO_VERSION = APP_VERSION;                 // check a deployment from the console
+  document.documentElement.dataset.version = APP_VERSION;
   S.store.mode = A.backend() === 'supabase' ? 'supabase' : 'demo';   // known before login
   session = await A.getSession();
   role = session ? session.role : null;

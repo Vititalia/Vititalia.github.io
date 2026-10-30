@@ -73,6 +73,31 @@ ok(!!document.querySelector('#loginForm [name="email"]'), 'login form has an ema
 ok(!!document.querySelector('#loginForm [name="password"]'), 'login form has a password field');
 ok(document.querySelectorAll('#tabbar a').length === 0, 'no navigation before sign-in');
 
+/* ---------------- the running version is printed in the app ---------------- */
+{
+  const cfg = await import('../js/config.js');
+  ok(/^\d+\.\d+\.\d+$/.test(cfg.APP_VERSION), `config carries a semver version (${cfg.APP_VERSION})`);
+  ok(window.__VIGNERO_VERSION === cfg.APP_VERSION, 'the shell exposes window.__VIGNERO_VERSION');
+  ok(document.documentElement.dataset.version === cfg.APP_VERSION, 'the <html> element is stamped with it');
+
+  await go('#/login');
+  const login = [...document.querySelectorAll('[data-app-version]')].map((n) => n.textContent.trim());
+  ok(login.length === 1 && login[0].includes(cfg.APP_VERSION),
+     `the login screen prints the version (${login.join(' | ')})`);
+
+  await loginAs('admin');
+  await go('#/profilo');
+  const profilo = [...document.querySelectorAll('[data-app-version]')].map((n) => n.textContent.trim());
+  ok(profilo.length === 1 && profilo[0].includes(cfg.APP_VERSION),
+     `Profilo prints the version (${profilo.join(' | ')})`);
+  ok(/dati reali|modalità dimostrativa/.test(profilo[0] || ''), 'and says which environment it runs against');
+
+  // leave the harness where the next block expects it: signed out, on the login screen
+  await app.logout();
+  await wait(60);
+  ok(!!document.querySelector('#loginForm [name="email"]'), 'back on the login screen for the next block');
+}
+
 /* ---------------- login flow ---------------- */
 {
   const submit = async (email, pwd) => {

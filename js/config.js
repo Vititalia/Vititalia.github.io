@@ -17,6 +17,10 @@ export function backend() {
   } catch { /* private mode */ }
   return (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) ? 'supabase' : 'demo';
 }
+/** The released version, shown in the app (Profilo, login) and exposed as
+ *  `window.__VIGNERO_VERSION` so a deployment can be checked from the console. */
+export const APP_VERSION = '1.0.1';
+
 export const isSupabase = () => backend() === 'supabase';
 
 /**

@@ -3,6 +3,14 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 19. The version is printed in the app
+
+**Versione 1.0.1** now appears on the login screen and in *Profilo* (with the
+environment: «dati reali» or «modalità dimostrativa»), and the shell exposes
+`window.__VIGNERO_VERSION` plus `<html data-version="…">` — so it is trivial to
+check which build a browser is actually running. The string lives in one place,
+`js/config.js` (`APP_VERSION`).
+
 ## v1.0.1 — 2026-10-30
 
 Three changes on top of v1.0.0: the linked lot can be detached and saved as

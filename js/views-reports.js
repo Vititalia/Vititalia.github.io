@@ -3,6 +3,7 @@ import * as S from './store.js';
 import * as U from './ui.js';
 import * as P from './permissions.js';
 import * as A from './auth.js';
+import { APP_VERSION } from './config.js';
 import { filterBar, parseFilters, serializeFilters, activeChips, mandatoryDefaults } from './filters.js';
 
 /* ---------- report view mode: cards (phone default) or table ---------- */
@@ -63,6 +64,7 @@ export function viewLogin(root, ctx) {
           <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Accedi</button>
           <p class="hint" style="text-align:center">Sessione di 8 ore. Le credenziali vengono
             verificate nel browser: nessun dato lascia il dispositivo.</p>
+          <p class="hint" style="text-align:center;margin-top:6px" data-app-version>Versione ${U.esc(APP_VERSION)}</p>
         </form>
 
         ${A.backend && A.backend() === 'supabase' ? '' : `
@@ -954,6 +956,8 @@ export function viewProfilo(root, ctx) {
         <h2 class="eyebrow" style="margin-bottom:8px">Sessione</h2>
         <p class="caption">${U.esc(P.ROLES.find((r) => r.key === s.role)?.blurb || '')}</p>
         <p class="caption mt">Valida ancora ${A.minutesLeft(s)} minuti.</p>
+        <p class="caption" data-app-version>Versione ${U.esc(APP_VERSION)} ·
+          ${A.backend() === 'supabase' ? 'dati reali' : 'modalità dimostrativa'}</p>
         <div class="row mt">
           <button class="btn btn-danger btn-sm" type="button" id="logoutBtn">Disconnetti</button>
           ${P.can(ctx.role, 'config.utenti') ? '<a class="btn btn-secondary btn-sm" href="#/config/utenti">Gestione utenti</a>' : ''}
