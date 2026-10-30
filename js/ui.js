@@ -157,7 +157,8 @@ export function combobox(host, { items, placeholder = 'Cerca…', onPick, value 
   const open = (q) => {
     close();
     const needle = (q || '').trim().toLowerCase();
-    filtered = items.filter((it) => !needle ||
+    // `always: true` keeps an item visible whatever the query (the «no lot» choice)
+    filtered = items.filter((it) => it.always || !needle ||
       it.label.toLowerCase().includes(needle) ||
       (it.sub || '').toLowerCase().includes(needle)).slice(0, max);
     list = el(`<div class="combo-list" role="listbox">

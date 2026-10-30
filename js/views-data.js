@@ -391,7 +391,7 @@ export function viewOrdini(root, ctx) {
 function openOrdineForm(ctx, existing) {
   const isEdit = !!existing;
   const lotItems = [
-    { value: '', label: '— Nessun lotto —', sub: 'salva l\'impegno senza collegarlo a un lotto' },
+    { value: '', label: '— Nessun lotto —', sub: 'salva l\'impegno senza collegarlo a un lotto', always: true },
     ...S.store.lotti.map((l) => ({
       value: l.id,
       label: `${l.produttore || 'Non attribuito'} · ${l.anno} · ${l.varieta} · ${l.clone}`,
