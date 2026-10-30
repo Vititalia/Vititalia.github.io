@@ -196,12 +196,12 @@ cannot create workflow files). `.nojekyll` keeps Jekyll out of the way.
 ### Releases
 
 The published version is tracked with git tags — **v1.0.0** is the first release in production,
-**v1.0.1** the current one (see [`CHANGELOG.md`](CHANGELOG.md)). To roll back:
+**v1.0.2** the current one (see [`CHANGELOG.md`](CHANGELOG.md)). To roll back:
 
 ```bash
 git fetch --tags
-git checkout v1.0.1                    # inspect / run it locally
-git push origin v1.0.1:main --force-with-lease   # make the live site serve it again (~1 min)
+git checkout v1.0.2                    # inspect / run it locally
+git push origin v1.0.2:main --force-with-lease   # make the live site serve it again (~1 min)
 ```
 
 `--force-with-lease` refuses if someone pushed in the meantime, so nothing is lost: the newer
