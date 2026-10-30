@@ -372,6 +372,8 @@ desktop = true;
 
   await go('#/dati/lotti');
   ok(!!document.getElementById('exportBtn'), 'lotti: the Esporta CSV button is there');
+  const lotCols = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
+  ok(lotCols.includes('Note'), `lotti: the note is a column (${lotCols.join(' · ')})`);
   tap(document.getElementById('exportBtn'));
   await wait(30);
   const lotCsv = captured.length ? await captured[captured.length - 1].text() : '';

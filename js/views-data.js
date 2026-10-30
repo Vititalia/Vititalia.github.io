@@ -114,7 +114,7 @@ export function viewLotti(root, ctx) {
       caption: 'Anagrafica validata: varietà → clone → portainnesto. Quantità intere.',
       cols: [{ label: 'Anno' }, { label: 'Produttore' }, { label: 'Tipologia' }, { label: 'Produzione' },
              { label: 'Varietà' }, { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' },
-             { label: 'Azioni' }],
+             { label: 'Note' }, { label: 'Azioni' }],
       rows: shown.length ? shown.map((l) => ({
         type: 'row',
         cells: [
@@ -126,6 +126,8 @@ export function viewLotti(root, ctx) {
           { html: `<span class="ident">${U.esc(l.clone)}</span>`, label: 'Clone', cls: 'cell-sub' },
           { html: `<span class="ident">${U.esc(l.portainnesto)}</span>`, label: 'Portainnesto' },
           U.metric('Quantità', U.fmtQty(l.quantita)),
+          { html: l.note ? U.esc(l.note) : '<span style="color:var(--ink-300)">—</span>',
+            label: 'Note', cls: 'note-cell' },
           { html: actions(l.id), label: 'Azioni', cls: 'no-print' },
         ],
       })) : [{ type: 'empty', cells: [{ html: 'Nessun lotto con questi criteri.' }] }],
