@@ -763,6 +763,25 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await auth.resetRegistry();
 }
 
+/* ---------------- quantities always use the dot as thousands separator ---------------- */
+{
+  const U1 = await import('../js/ui.js');
+  ok(U1.fmtQty(1234) === '1.234', `thousands separator on 4 digits (${U1.fmtQty(1234)})`);
+  ok(U1.fmtQty(1234567) === '1.234.567', `thousands separator on 7 digits (${U1.fmtQty(1234567)})`);
+  ok(U1.fmtQty(999) === '999', `no separator below 1000 (${U1.fmtQty(999)})`);
+  ok(U1.fmtSigned(-1234) === '\u22121.234', `signed negatives keep the separator (${U1.fmtSigned(-1234)})`);
+
+  await loginAs('admin');
+  await go('#/r/disponibilita');
+  const bare = [...document.querySelectorAll('.grid tbody td.metric')]
+    .map((td) => td.textContent.trim())
+    .filter((t) => /(?<![\d.])\d{4,}(?![\d])/.test(t));   // 4+ digits with no separator
+  ok(bare.length === 0, `report cells never print a bare 4-digit number (${bare.slice(0, 3).join(', ')})`);
+  const withDots = [...document.querySelectorAll('.grid tbody td.metric')]
+    .filter((td) => /\d\.\d{3}/.test(td.textContent)).length;
+  ok(withDots > 0, `report cells use the separator (${withDots} cells)`);
+}
+
 /* ---------------- the async write API the screens use (demo backend) ---------------- */
 {
   const S4 = await import('../js/store.js');

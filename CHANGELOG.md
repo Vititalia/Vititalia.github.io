@@ -23,6 +23,13 @@ produzione, year and note text, and it filters the list in place.
 Same reading order as the lots screen: variety first, then clone, then rootstock,
 then the producer of the linked lot (orders without a lot come last).
 
+## 11. Quantities always show the dot as thousands separator
+
+`1.234` instead of `1234`: the formatting helper now groups by hand, because the
+Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies to
+every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
+KPIs). Negative values keep the leading `−` (`−1.234`).
+
 ## 9. The linked lot is optional on an order
 
 «Nuovo impegno» no longer requires a lot: the label lost «(obbligatorio)», the

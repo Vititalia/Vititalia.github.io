@@ -21,6 +21,23 @@ export function icon(name, cls) {
 const nf = new Intl.NumberFormat('it-IT');
 const df = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
 
+/**
+ * Italian grouping done by hand: the CLDR rules for it-IT skip the separator on
+ * four-digit numbers (1.234 is printed as 1234), which reads wrong in a warehouse
+ * table. Every quantity goes through here, so 1234 is always «1.234».
+ * `raw` is a plain number string ("1234567" or "1234.5"); the decimal separator
+ * becomes a comma, the grouping separator a dot.
+ */
+function group3(raw) {
+  const text = String(raw);
+  if (!/^-?\d+(\.\d+)?$/.test(text)) return nf.format(Number(text));   // 1e+21 and friends
+  const neg = text.startsWith('-');
+  const body = neg ? text.slice(1) : text;
+  const [int, frac] = body.split('.');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (neg ? '-' : '') + (frac ? grouped + ',' + frac : grouped);
+}
+
 export function esc(v) {
   return String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -29,16 +46,17 @@ export function esc(v) {
 
 export function fmt(n) {
   if (n == null || Number.isNaN(Number(n))) return '—';
-  return nf.format(Number(n));
+  return group3(String(Math.round(Number(n) * 1000) / 1000));
 }
 export function fmtQty(n) {
   if (n == null || Number.isNaN(Number(n))) return '—';
-  return df.format(Number(n));
+  return group3(String(Math.round(Number(n))));
 }
 /** Negative values carry a leading minus (U+2212), positives are plain. */
 export function fmtSigned(n) {
   const v = Number(n || 0);
-  return v < 0 ? '\u2212' + df.format(Math.abs(v)) : df.format(v);
+  const abs = group3(String(Math.round(Math.abs(v))));
+  return v < 0 ? '\u2212' + abs : group3(String(Math.round(v)));
 }
 export function pct(part, total) {
   if (!total) return '—';

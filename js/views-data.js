@@ -276,8 +276,8 @@ export function viewOrdini(root, ctx) {
     </div></div>
 
     <div class="banner banner-info"><span aria-hidden="true">i</span>
-      <span>Il lotto collegato è <b>facoltativo</b>: se lo scegli, la quantità entra nella colonna del
-      produttore nel riepilogo per produttore; senza lotto l'impegno resta fuori da quelle colonne.</span></div>
+      <span>Il lotto collegato (<code>id_magazzino</code>) è <b>facoltativo</b>: se lo scegli, la quantità entra
+      nella colonna del produttore nel riepilogo per produttore; senza lotto l'impegno resta fuori da quelle colonne.</span></div>
 
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
