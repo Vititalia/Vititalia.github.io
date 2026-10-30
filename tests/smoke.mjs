@@ -786,6 +786,13 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(shape.rows > 0, `vite: flat rows rendered (${shape.rows})`);
   ok(shape.hasFilter, 'vite: the variety filter is present');
   ok(shape.cols.includes('Codice varietà'), `vite: the variety is a column (${shape.cols.join(' · ')})`);
+  ok(shape.cols.indexOf('Codice varietà') < shape.cols.indexOf('Codice clone'),
+     `vite: variety comes before clone (${shape.cols.slice(0, 3).join(' · ')})`);
+  const firstRowCells = [...document.querySelectorAll('.grid tbody tr.trow')][0]?.querySelectorAll('td');
+  ok(firstRowCells && firstRowCells[0].textContent.trim() === firstRowCells[1].textContent.trim()
+     ? true
+     : (firstRowCells[0].textContent.trim().length > 0 && firstRowCells[0].dataset.label === 'Codice varietà'),
+     'vite: the first cell of a row is the variety');
 
   /* pick a variety through the combobox */
   const producerPair = storeMod.store.viti.find((v) => storeMod.usageOfPair(v.varieta, v.clone) > 0);

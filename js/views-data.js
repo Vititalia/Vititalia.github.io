@@ -612,8 +612,8 @@ export function viewViti(root, ctx) {
     return {
       type: 'row',
       cells: [
-        { html: `<span class="ident">${U.esc(v.clone)}</span>`, cls: 'ident', label: 'Codice clone' },
-        { html: `<span class="ident">${U.esc(v.varieta)}</span>`, label: 'Codice varietà', cls: 'cell-sub' },
+        { html: `<span class="ident">${U.esc(v.varieta)}</span>`, cls: 'ident', label: 'Codice varietà' },
+        { html: `<span class="ident">${U.esc(v.clone)}</span>`, label: 'Codice clone', cls: 'cell-sub' },
         U.metric('Utilizzi', U.fmtQty(used)),
         { html: used ? '<span class="badge badge-ok">in uso</span>' : '<span class="badge">libera</span>', label: 'Stato' },
         { html: `<div class="row" style="gap:6px">
@@ -653,7 +653,7 @@ export function viewViti(root, ctx) {
 
     <div class="report">${U.buildTable({
       caption: 'Una riga per coppia varietà/clone, ordinata per varietà e clone. Il clone appartiene sempre a una varietà (F-V2); una coppia usata da lotti o impegni non è modificabile né eliminabile.',
-      cols: [{ label: 'Codice clone' }, { label: 'Codice varietà' }, { label: 'Utilizzi', align: 'r' },
+      cols: [{ label: 'Codice varietà' }, { label: 'Codice clone' }, { label: 'Utilizzi', align: 'r' },
              { label: 'Stato' }, { label: 'Azioni' }],
       rows: rows.length ? rows : [{ type: 'empty', cells: [{ html: 'Nessuna coppia con questi filtri.' }] }],
     })}</div>
