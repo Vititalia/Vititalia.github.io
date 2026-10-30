@@ -343,9 +343,9 @@ function subtotalRow(t, withExtra = true) {
       { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
       { html: U.fmtQty(t.sped), cls: 'r metric', label: 'Di cui spedito' },
       { html: `<span class="${t.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(t.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
-      ...((withExtra && (t.ripiantate != null || t.frigoconservate != null)) ? [
-        { html: U.fmtQty(t.ripiantate || 0), cls: 'r metric', label: 'Ripiantate' },
-        { html: U.fmtQty(t.frigoconservate || 0), cls: 'r metric', label: 'Frigoconservate' },
+      ...((withExtra && (t.ripiantato != null || t.frigoconservato != null)) ? [
+        { html: U.fmtQty(t.ripiantato || 0), cls: 'r metric', label: 'Ripiantato' },
+        { html: U.fmtQty(t.frigoconservato || 0), cls: 'r metric', label: 'Frigoconservato' },
       ] : []),
     ],
   };
@@ -363,7 +363,7 @@ function cloneRow(row, withExtra = true) {
       U.metric('Ordinato', U.fmtQty(row.ord)),
       U.metric('Di cui spedito', U.fmtQty(row.sped)),
       U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
-      ...((withExtra && ('ripiantate' in row)) ? extraCells(row) : []),
+      ...((withExtra && ('ripiantato' in row)) ? extraCells(row) : []),
     ],
   };
 }
@@ -378,9 +378,9 @@ function grandTotalRow(totals, withExtra = true) {
       { html: U.fmtQty(totals.ord), cls: 'r metric', label: 'Ordinato' },
       { html: U.fmtQty(totals.sped), cls: 'r metric', label: 'Di cui spedito' },
       { html: `<span class="${totals.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(totals.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
-      ...((withExtra && (totals.ripiantate != null || totals.frigoconservate != null)) ? [
-        { html: U.fmtQty(totals.ripiantate || 0), cls: 'r metric', label: 'Ripiantate' },
-        { html: U.fmtQty(totals.frigoconservate || 0), cls: 'r metric', label: 'Frigoconservate' },
+      ...((withExtra && (totals.ripiantato != null || totals.frigoconservato != null)) ? [
+        { html: U.fmtQty(totals.ripiantato || 0), cls: 'r metric', label: 'Ripiantato' },
+        { html: U.fmtQty(totals.frigoconservato || 0), cls: 'r metric', label: 'Frigoconservato' },
       ] : []),
     ],
   };
@@ -403,7 +403,7 @@ function availabilityRows(r, withExtra = true) {
 
 function availabilityCsvRows(r, withExtra = true) {
   const out = [];
-  const tail = (row) => (withExtra ? [row.ripiantate || 0, row.frigoconservate || 0] : []);
+  const tail = (row) => (withExtra ? [row.ripiantato || 0, row.frigoconservato || 0] : []);
   let prev = null;
   for (const row of r.rows) {
     if (grpKey(row) !== prev) {
@@ -424,37 +424,41 @@ const AVAILABILITY_COLS = [{ label: 'Codice clone' }, { label: 'Codice portainne
   { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
   { label: 'Di cui spedito', align: 'r' }, { label: 'Disponibilità', align: 'r' }];
 
-/* the two optional series: warehouse quantity of the same clone/rootstock held
- * as Ripiantato / Frigoconservato (PD-16, revealed by «Aggiungi altro») */
-const EXTRA_COLS = [{ label: 'Ripiantate', align: 'r' }, { label: 'Frigoconservate', align: 'r' }];
+/* the two optional series: available quantity of the same lot reference with the
+ * other produzione (PD-18, revealed by «Aggiungi altro») */
+const EXTRA_COLS = [{ label: 'Ripiantato', align: 'r' }, { label: 'Frigoconservato', align: 'r' }];
 const extraCells = (row) => [
-  U.metric('Ripiantate', U.fmtQty(row.ripiantate || 0)),
-  U.metric('Frigoconservate', U.fmtQty(row.frigoconservate || 0)),
+  U.metric('Ripiantato', U.fmtQty(row.ripiantato || 0)),
+  U.metric('Frigoconservato', U.fmtQty(row.frigoconservato || 0)),
 ];
 
 /* Every export follows the same dimension order (PD-14):
  * Tipologia; Produzione; Codice varietà; Codice clone; Codice portainnesto; measures */
 const AVAILABILITY_CSV_HEADERS = ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone',
   'Codice portainnesto', 'Magazzino', 'Ordinato', 'Di cui spedito', 'Disponibilità'];
-const AVAILABILITY_CSV_EXTRA = ['Ripiantate', 'Frigoconservate'];
+const AVAILABILITY_CSV_EXTRA = ['Ripiantato', 'Frigoconservato'];
 
 export function viewDisponibilita(root, ctx) {
   const f = parseFilters(ctx.params, { mandatory: true });
-  const r = S.reportDisponibilita(f);
+  // the table always reads «Nuova produzione»: that is the baseline, and the two
+  // optional columns carry the alternative produzioni (PD-18)
+  const produzione = mandatoryDefaults().produzione;
+  const r = S.reportDisponibilita({ ...f, produzione });
   const table = wantsTableView(ctx);
   const extra = wantsExtraColumns(ctx);
   reportShell(root, {
     eyebrow: 'Riepiloghi / Disponibilità',
     title: 'Riepilogo disponibilità',
-    sub: `${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo`,
+    sub: `${r.rowCount} combinazioni · ${r.subtotals.size} portainnesti · ${r.negativeCount} in negativo ·
+      quantità di ${U.esc(produzione)}`,
     actions: `${viewToggle(ctx, table)}
       <button class="btn btn-secondary btn-sm${extra ? ' is-on' : ''}" type="button" id="extraBtn"
-              aria-pressed="${extra}" title="Mostra anche Ripiantate e Frigoconservate">Aggiungi altro</button>
+              aria-pressed="${extra}" title="Mostra anche Ripiantato e Frigoconservato">Aggiungi altro</button>
       <button class="btn btn-secondary btn-sm" type="button" id="exportBtn">Esporta CSV</button>`,
   });
-  filterBar(root.querySelector('#filterHost'), f,
-    (next) => ctx.navigate('#/r/disponibilita' + serializeFilters(next)),
-    { showPortainnesto: true, mandatory: ['tipologia', 'produzione'] });
+  filterBar(root.querySelector('#filterHost'), { ...f, produzione },
+    (next) => ctx.navigate('#/r/disponibilita' + serializeFilters({ ...next, produzione: '' })),
+    { showPortainnesto: true, showProduzione: false, mandatory: ['tipologia'] });
 
   const host = root.querySelector('#reportHost');
   if (!r.rows.length) {
@@ -468,8 +472,8 @@ export function viewDisponibilita(root, ctx) {
     host.innerHTML = `<div class="report${table ? ' table-mode' : ''}">${U.buildTable({
       scroll: table,
       caption: {
-        wide: 'Prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.',
-        narrow: 'Prima il totale del portainnesto, poi i cloni.',
+        wide: `Quantità di ${U.esc(produzione)}: prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.`,
+        narrow: `Quantità di ${U.esc(produzione)}: prima il totale del portainnesto, poi i cloni.`,
       },
       cols: extra ? [...AVAILABILITY_COLS, ...EXTRA_COLS] : AVAILABILITY_COLS,
       rows: availabilityRows(r, extra),
@@ -479,7 +483,7 @@ export function viewDisponibilita(root, ctx) {
   root.querySelector('#extraBtn').addEventListener('click', () => {
     setExtraColumns(!extra);
     ctx.refresh();
-    U.toast(extra ? 'Colonne aggiuntive nascoste' : 'Ripiantate e Frigoconservate aggiunte alla tabella');
+    U.toast(extra ? 'Colonne aggiuntive nascoste' : 'Ripiantato e Frigoconservato aggiunte alla tabella');
   });
 
   root.querySelector('#exportBtn').addEventListener('click', () => {

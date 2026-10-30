@@ -132,7 +132,9 @@ async function initSupabase(role) {
     // «Messo a disposizione»: the view already returns only the caller's records
     const messo = role === 'produttore'
       ? await fetchAll(c, 'vista_messo_a_disposizione', '*') : [];
-    store.remote = { rows, negative, lots, messo };
+    // «Ripiantato» / «Frigoconservato» available quantities, joined server-side
+    const alternative = await fetchAll(c, 'vista_produzioni_alternative', '*');
+    store.remote = { rows, negative, lots, messo, alternative };
     // The anagrafiche are closed to these roles, so the filter comboboxes were
     // empty: build the master-data index from the aggregate rows themselves —
     // the codes that actually appear, which is exactly what can be filtered.
@@ -317,46 +319,90 @@ const byRootstock = (C) => (a, b) =>
   C.compare(a.varieta, b.varieta) ||
   C.compare(a.clone, b.clone);
 
-/* The availability report also shows how much of the same clone/rootstock is held
- * as «Ripiantato» and «Frigoconservato» — the two other production modes. The
- * report itself is filtered on one produzione, so these two come from the same
- * lots with a different produzione and are attached to every row of the
- * combination (PD-16). */
-export const OTHER_PRODUCTIONS = { ripiantate: 'Ripiantato', frigoconservate: 'Frigoconservato' };
-const EXTRA_KEYS = ['ripiantate', 'frigoconservate'];
+/* The availability report shows, next to the «Nuova produzione» numbers, how much
+ * of the same *lot reference* is available as replanted / fridge-stored material.
+ * The join follows the reference lot of «Nuova produzione»:
+ *   tipologia, codice varietà, codice clone, codice portainnesto,
+ *   produttore, anno di conferimento
+ * and the value is the stock of that key with the other produzione minus what has
+ * already been committed on it (orders of that produzione, joined to their lot).
+ * Live roles without table access get the same numbers from
+ * `vista_produzioni_alternative` (migration 007). */
+export const ALT_PRODUCTIONS = ['Ripiantato', 'Frigoconservato'];
+export const ALT_FIELDS = { Ripiantato: 'ripiantato', Frigoconservato: 'frigoconservato' };
+const EXTRA_KEYS = Object.values(ALT_FIELDS);
 
 const comboKey = (r) =>
   [r.tipologia || NON_INDICATA, r.varieta, r.clone, r.portainnesto].join('\u0001');
 
-function otherProductionMap(filters) {
+const altKey = (r, produttore, anno) =>
+  [comboKey(r), produttore || '', anno == null ? '' : String(anno)].join('\u0001');
+
+function alternativeSeries(filters) {
   const f = filters || {};
-  const out = new Map();
-  const sidePasses = (r) =>
+  const sideOk = (r) =>
     (!f.tipologia || (r.tipologia || NON_INDICATA) === f.tipologia) &&
     (!f.varieta || r.varieta === f.varieta) &&
     (!f.portainnesto || r.portainnesto === f.portainnesto);
-  const add = (r) => {
-    if (!sidePasses(r)) return;
-    const produzione = r.produzione || NON_INDICATA;
-    const k = comboKey(r);
-    if (!out.has(k)) out.set(k, { ripiantate: 0, frigoconservate: 0 });
-    const slot = out.get(k);
-    for (const [field, value] of Object.entries(OTHER_PRODUCTIONS)) {
-      if (produzione === value) slot[field] += Number(r.quantita || 0);
-    }
-  };
+
+  const out = new Map();     // combination → { ripiantato, frigoconservato }
+
+  /* live roles: the view already sums over the reference lots */
   if (store.mode === 'supabase' && store.remote) {
-    // the aggregate view carries one row per produzione: enough to build the map
-    for (const r of store.remote.rows || []) {
-      add({
-        tipologia: r.tipologia || NON_INDICATA,
-        varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
-        produzione: r.produzione || NON_INDICATA, quantita: Number(r.giacenza_magazzino || 0),
-      });
+    for (const r of store.remote.alternative || []) {
+      const row = {
+        tipologia: r.tipologia || NON_INDICATA, varieta: r.codice_varieta,
+        clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+        produzione: r.produzione,
+      };
+      const field = ALT_FIELDS[row.produzione];
+      if (!field || !sideOk(row)) continue;
+      const k = comboKey(row);
+      if (!out.has(k)) out.set(k, { ripiantato: 0, frigoconservato: 0 });
+      out.get(k)[field] += Number(r.disponibilita || 0);
     }
     return out;
   }
-  for (const l of store.lotti) add(l);
+
+  /* engine: reference keys (the «Nuova produzione» lots) and the available stock */
+  const refs = new Map();    // combination → Set(altKey)
+  const avail = new Map();   // altKey → { ripiantato, frigoconservato }
+  const bump = (key, produzione, delta) => {
+    const field = ALT_FIELDS[produzione];
+    if (!field) return;
+    if (!avail.has(key)) avail.set(key, { ripiantato: 0, frigoconservato: 0 });
+    avail.get(key)[field] += delta;
+  };
+
+  for (const l of store.lotti) {
+    if ((l.produzione || NON_INDICATA) === 'Nuova produzione' && sideOk(l)) {
+      const k = comboKey(l);
+      if (!refs.has(k)) refs.set(k, new Set());
+      refs.get(k).add(altKey(l, l.produttore, l.anno));
+    }
+  }
+  for (const l of store.lotti) {
+    const produzione = l.produzione || NON_INDICATA;
+    if (!ALT_FIELDS[produzione] || !sideOk(l)) continue;
+    bump(altKey(l, l.produttore, l.anno), produzione, Number(l.quantita || 0));
+  }
+  for (const o of store.ordini) {
+    const produzione = o.produzione || NON_INDICATA;
+    if (!ALT_FIELDS[produzione] || !sideOk(o)) continue;
+    const lot = o.id_magazzino ? store.index.lotById.get(o.id_magazzino) : null;
+    if (!lot) continue;      // without a lot the commitment cannot be joined
+    bump(altKey(o, lot.produttore, lot.anno), produzione, -Number(o.quantita || 0));
+  }
+  for (const [k, keys] of refs) {
+    const sum = { ripiantato: 0, frigoconservato: 0 };
+    for (const key of keys) {
+      const a = avail.get(key);
+      if (!a) continue;
+      sum.ripiantato += a.ripiantato;
+      sum.frigoconservato += a.frigoconservato;
+    }
+    out.set(k, sum);
+  }
   return out;
 }
 
@@ -396,9 +442,9 @@ export function reportDisponibilita(filters) {
   // read the tables) fall through to the shared engine below
   if (store.mode === 'supabase' && store.remote) return reportFromView(filters);
   const C = collator();
-  const extra = otherProductionMap(filters);
+  const extra = alternativeSeries(filters);
   const rows = [...metrics(filters).values()]
-    .map((r) => ({ ...r, ...(extra.get(comboKey(r)) || { ripiantate: 0, frigoconservate: 0 }) }))
+    .map((r) => ({ ...r, ...(extra.get(comboKey(r)) || { ripiantato: 0, frigoconservato: 0 }) }))
     .sort(byRootstock(C));
   return {
     rows,
@@ -494,9 +540,9 @@ function reportFromView(filters) {
     .sort(byRootstock(C));
 
   // the extra series come from the same view (all produzioni, side filters only)
-  const extra = otherProductionMap(f);
+  const extra = alternativeSeries(f);
   const withExtra = rows.map((r) => ({ ...r,
-    ...(extra.get(comboKey(r)) || { ripiantate: 0, frigoconservate: 0 }) }));
+    ...(extra.get(comboKey(r)) || { ripiantato: 0, frigoconservato: 0 }) }));
 
   return {
     rows: withExtra,

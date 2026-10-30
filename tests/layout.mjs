@@ -848,12 +848,12 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
     const { page, ctx } = await open({ width: w, height: 900 }, '#/r/disponibilita');
     const colsOf = () => page.$$eval('.grid thead th', (t) => t.map((x) => x.textContent.trim()));
     const before = await colsOf();
-    ok(before.length === 6 && !before.includes('Ripiantate'),
+    ok(before.length === 6 && !before.includes('Ripiantato'),
        `${label}: six columns until «Aggiungi altro» is pressed (${before.length})`);
     await page.click('#extraBtn');
     await page.waitForTimeout(400);
     const after = await colsOf();
-    ok(after.length === 8 && after.slice(-2).join('·') === 'Ripiantate·Frigoconservate',
+    ok(after.length === 8 && after.slice(-2).join('·') === 'Ripiantato·Frigoconservato',
        `${label}: the two columns open (${after.join(' · ')})`);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     ok(overflow <= 1, `${label}: the page does not scroll sideways with them open (${overflow}px)`);

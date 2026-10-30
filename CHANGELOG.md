@@ -3,6 +3,23 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 20. Disponibilità: no «Produzione» filter, and the two alternative columns follow the lot reference
+
+* The **Produzione filter is gone** from the availability report: the table always
+  shows the quantities of **Nuova produzione** (stated in the header and in the
+  caption), so the baseline numbers never move.
+* The two optional columns are now **«Ripiantato»** and **«Frigoconservato»** and
+  they join on the **lot reference of a «Nuova produzione» lot** — tipologia,
+  codice varietà, codice clone, codice portainnesto, **produttore** and **anno di
+  conferimento**. Their value is the *available* quantity of that reference with
+  the other produzione: warehouse lots of that produzione **minus** the
+  commitments (orders of that produzione, joined to their lot).
+* Still hidden until **«Aggiungi altro»** is pressed, and the export follows it.
+
+Live roles without table access read the same numbers from the new view
+`vista_produzioni_alternative` (migration 007), which performs the join in the
+database, so produttore and vendite see identical figures.
+
 ## 19. The version is printed in the app
 
 **Versione 1.0.1** now appears on the login screen and in *Profilo* (with the

@@ -200,32 +200,72 @@ ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need
     'messo: the rootstock filter applies');
 }
 
-/* ---------- report 1: «Ripiantate» e «Frigoconservate» ---------- */
+/* ---------- report 1: «Ripiantato» e «Frigoconservato» ---------- */
 {
   const f = { tipologia: 'Barbatelle innestate', produzione: 'Nuova produzione' };
   const r = reportDisponibilita(f);
-  ok(r.rows.every((x) => 'ripiantate' in x && 'frigoconservate' in x),
+  ok(r.rows.every((x) => 'ripiantato' in x && 'frigoconservato' in x),
      'report 1 always carries the two extra series');
-  // the value must be the warehouse quantity of the SAME combination in the other produzione
-  const withRip = r.rows.filter((x) => x.ripiantate > 0);
-  for (const row of withRip) {
-    const expected = store.lotti
-      .filter((l) => l.produzione === 'Ripiantato' && l.varieta === row.varieta
-        && l.clone === row.clone && l.portainnesto === row.portainnesto)
-      .reduce((a, l) => a + l.quantita, 0);
-    near(row.ripiantate, expected, `ripiantate for ${row.clone}`);
+
+  // the join follows the «Nuova produzione» lot reference:
+  // tipologia, varietà, clone, portainnesto, produttore, anno di conferimento
+  const keyOf = (row, produttore, anno) =>
+    `${row.varieta}|${row.clone}|${row.portainnesto}|${produttore || ''}|${anno}`;
+  const expected = (row) => {
+    const references = new Set(
+      store.lotti
+        .filter((l) => l.produzione === 'Nuova produzione' && l.tipologia === row.tipologia
+          && l.varieta === row.varieta && l.clone === row.clone && l.portainnesto === row.portainnesto)
+        .map((l) => keyOf(row, l.produttore, l.anno)),
+    );
+    let ripiantato = 0;
+    let frigoconservato = 0;
+    for (const ref of references) {
+      const [varieta, clone, root, produttore, anno] = ref.split('|');
+      for (const l of store.lotti) {
+        if (l.produzione !== 'Ripiantato' && l.produzione !== 'Frigoconservato') continue;
+        if (l.varieta !== varieta || l.clone !== clone || l.portainnesto !== root) continue;
+        if ((l.produttore || '') !== produttore || String(l.anno) !== anno) continue;
+        if (l.produzione === 'Ripiantato') ripiantato += l.quantita;
+        else frigoconservato += l.quantita;
+      }
+      for (const o of store.ordini) {
+        if (o.produzione !== 'Ripiantato' && o.produzione !== 'Frigoconservato') continue;
+        const lot = o.id_magazzino ? store.index.lotById.get(o.id_magazzino) : null;
+        if (!lot) continue;
+        if (o.varieta !== varieta || o.clone !== clone || o.portainnesto !== root) continue;
+        if ((lot.produttore || '') !== produttore || String(lot.anno) !== anno) continue;
+        if (o.produzione === 'Ripiantato') ripiantato -= o.quantita;
+        else frigoconservato -= o.quantita;
+      }
+    }
+    return { ripiantato, frigoconservato };
+  };
+
+  const withStock = r.rows.filter((x) => x.ripiantato || x.frigoconservato);
+  for (const row of withStock) {
+    const want = expected(row);
+    near(row.ripiantato, want.ripiantato, `ripiantato for ${row.clone} (${row.portainnesto})`);
+    near(row.frigoconservato, want.frigoconservato, `frigoconservato for ${row.clone} (${row.portainnesto})`);
   }
-  // the column belongs to the combination: combinations that exist *only* as
-  // Ripiantato have no row in this (produzione-filtered) report, so the total is
-  // the summed quantity of the rows, never more than all Ripiantato lots
-  const allRip = store.lotti.filter((l) => l.produzione === 'Ripiantato'
-    && l.tipologia === f.tipologia).reduce((a, l) => a + l.quantita, 0);
-  ok(r.totals.ripiantate === r.rows.reduce((a, x) => a + x.ripiantate, 0),
+  ok(r.totals.ripiantato === r.rows.reduce((a, x) => a + x.ripiantato, 0),
      'the grand total is the sum of the row values');
-  ok(r.totals.ripiantate <= allRip, 'and never exceeds the Ripiantato stock');
-  near(r.totals.frigoconservate, 0, 'no Frigoconservato lots in the snapshot');
-  const sub = [...r.subtotals.values()].reduce((a, t) => a + t.ripiantate, 0);
-  near(sub, r.totals.ripiantate, 'the subtotals sum the extra series too');
+  ok(r.totals.frigoconservato === r.rows.reduce((a, x) => a + x.frigoconservato, 0),
+     'same for Frigoconservato');
+  const sub = [...r.subtotals.values()].reduce((a, t) => a + (t.ripiantato || 0), 0);
+  near(sub, r.totals.ripiantato, 'the subtotals sum the extra series too');
+
+  // a combination whose «Ripiantato» lot has no matching «Nuova produzione»
+  // reference (different produttore/anno/rootstock) stays at zero
+  const lonely = store.lotti.find((l) => l.produzione === 'Ripiantato'
+    && !store.lotti.some((n) => n.produzione === 'Nuova produzione'
+      && n.varieta === l.varieta && n.clone === l.clone && n.portainnesto === l.portainnesto
+      && (n.produttore || '') === (l.produttore || '') && String(n.anno) === String(l.anno)));
+  if (lonely) {
+    const row = r.rows.find((x) => x.varieta === lonely.varieta && x.clone === lonely.clone
+      && x.portainnesto === lonely.portainnesto);
+    if (row) ok(row.ripiantato === 0, 'a reference without a «Nuova produzione» lot does not add up');
+  }
 }
 
 /* ---------- filters ---------- */

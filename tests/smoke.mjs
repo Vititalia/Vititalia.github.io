@@ -276,10 +276,11 @@ desktop = true;
   ok(shape.filters.some((l) => l.includes('Codice portainnesto')), 'rootstock filter present');
   ok(shape.tipologiaOpts.length === 4 && shape.tipologiaOpts.every(Boolean),
      `tipologia mandatory: no empty option (${shape.tipologiaOpts.length})`);
-  ok(shape.produzioneOpts.length === 3 && shape.produzioneOpts.every(Boolean),
-     `produzione mandatory: no empty option (${shape.produzioneOpts.length})`);
-  ok(shape.tipologiaSel === 'Barbatelle innestate' && shape.produzioneSel === 'Nuova produzione',
-     `defaults applied (${shape.tipologiaSel} / ${shape.produzioneSel})`);
+  const prodWrap = document.querySelector('#filterHost select[data-filter="produzione"]')?.closest('label');
+  ok(!prodWrap || prodWrap.hidden,
+     'the «Produzione» filter is not shown on this report');
+  ok(shape.tipologiaSel === 'Barbatelle innestate', `tipologia default applied (${shape.tipologiaSel})`);
+  ok(/quantità di Nuova produzione/.test(text()), 'the header states the fixed produzione');
   ok(text().includes('Totale per portainnesto'), 'subtotal labelled «Totale per portainnesto»');
 
   const root = '110 RICHTER';
@@ -288,6 +289,8 @@ desktop = true;
     .map((td) => td.textContent.trim());
   ok(roots.length > 0 && roots.every((x) => x === root), `rootstock filter applies (${roots.length} rows)`);
   ok(document.querySelectorAll('.chip').length === 1, 'the rootstock is a removable chip');
+  ok(![...document.querySelectorAll('.chip')].some((c) => /Produzione/i.test(c.textContent)),
+     'produzione is no longer a chip');
   ok(![...document.querySelectorAll('.chip')].some((c) => /Tipologia|Produzione/.test(c.textContent)),
      'mandatory filters are not removable chips');
 }
@@ -934,16 +937,16 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await loginAs('admin');
   await go('#/r/disponibilita');
   const colsOf = () => [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
-  ok(!colsOf().includes('Ripiantate'), 'disponibilità: the extra columns are hidden by default');
+  ok(!colsOf().includes('Ripiantato'), 'disponibilità: the extra columns are hidden by default');
   const btn = document.getElementById('extraBtn');
   ok(!!btn && btn.getAttribute('aria-pressed') === 'false', 'the button starts off');
 
   btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(120);
   const cols = colsOf();
-  ok(cols.includes('Ripiantate') && cols.includes('Frigoconservate'),
+  ok(cols.includes('Ripiantato') && cols.includes('Frigoconservato'),
      `pressing it opens the two columns (${cols.join(' · ')})`);
-  ok(cols.slice(-2).join('·') === 'Ripiantate·Frigoconservate', 'they close the table');
+  ok(cols.slice(-2).join('·') === 'Ripiantato·Frigoconservato', 'they close the table');
   ok(document.getElementById('extraBtn').getAttribute('aria-pressed') === 'true', 'the button reports the state');
 
   /* cells carry the numbers, and a subtotal row lines up with the header */
@@ -959,17 +962,17 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   btn2(document.getElementById('exportBtn'));
   await wait(40);
   const head = await captured[captured.length - 1].text();
-  ok(head.split('\r\n')[0].includes(';Ripiantate;Frigoconservate'), 'the CSV carries the two columns when open');
+  ok(head.split('\r\n')[0].includes(';Ripiantato;Frigoconservato'), 'the CSV carries the two columns when open');
 
   /* and the choice is remembered, so it stays on for the next visit */
   await go('#/r/indisponibilita');
   await go('#/r/disponibilita');
-  ok(colsOf().includes('Ripiantate'), 'the choice is remembered across visits');
+  ok(colsOf().includes('Ripiantato'), 'the choice is remembered across visits');
 
   /* switching it off restores the six columns */
   document.getElementById('extraBtn').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(120);
-  ok(!colsOf().includes('Ripiantate'), 'pressing it again hides them');
+  ok(!colsOf().includes('Ripiantato'), 'pressing it again hides them');
   function btn2(node) { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); }
 }
 

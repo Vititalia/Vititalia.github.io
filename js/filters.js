@@ -61,6 +61,8 @@ export function filterBar(host, filters, onChange, opts = {}) {
   const showVarieta = opts.showVarieta !== false;
   const showPortainnesto = opts.showPortainnesto === true;
   const showProduttore = opts.showProduttore === true;
+  const showProduzione = opts.showProduzione !== false;   // the availability report fixes it
+  const skipChips = new Set([...(opts.skipChips || []), ...(showProduzione ? [] : ['produzione'])]);
   const mandatory = new Set(opts.mandatory || []);
   const defaults = mandatoryDefaults();
   const tid = 'f-' + Math.random().toString(36).slice(2, 7);
@@ -79,7 +81,7 @@ export function filterBar(host, filters, onChange, opts = {}) {
         <span>Tipologia${mandatory.has('tipologia') ? ' <em class="req">obbligatoria</em>' : ''}</span>
         <select id="${tid}-tip" data-filter="tipologia">${options('tipologia', S.store.meta.tipologie)}</select>
       </label>
-      <label class="field" for="${tid}-prod" style="margin:0">
+      <label class="field" for="${tid}-prod" style="margin:0" ${showProduzione ? '' : 'hidden'}>
         <span>Produzione${mandatory.has('produzione') ? ' <em class="req">obbligatoria</em>' : ''}</span>
         <select id="${tid}-prod" data-filter="produzione">${options('produzione', S.store.meta.produzioni)}</select>
       </label>
@@ -134,13 +136,13 @@ export function filterBar(host, filters, onChange, opts = {}) {
   }
 
   host.querySelector('[data-reset]').addEventListener('click', () => {
-    const cleared = activeChips(filters, { skip: [...mandatory] }).length;
+    const cleared = activeChips(filters, { skip: [...mandatory, ...skipChips] }).length;
     if (!cleared) return;
     onChange({ ...EMPTY, ...(mandatory.size ? defaults : {}) });
   });
 
   const chips = host.querySelector(`#${tid}-chips`);
-  const list = activeChips(filters, { skip: [...mandatory] });
+  const list = activeChips(filters, { skip: [...mandatory, ...skipChips] });
   chips.innerHTML = list.map((c) =>
     `<button class="chip" type="button" data-chip="${c.key}">
         <b>${U.esc(c.label)}</b><span aria-hidden="true">✕</span>
