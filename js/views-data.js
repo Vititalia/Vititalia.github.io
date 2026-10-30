@@ -69,6 +69,22 @@ function wireVarietyClone(scope, preset = {}) {
   };
 }
 
+/**
+ * Re-renders the list and puts the caret back where it was: the debounced
+ * search refreshes the view (new DOM), which used to drop the focus and make the
+ * cursor disappear while typing.
+ */
+function refreshKeepingCaret(ctx, inputId = 'q') {
+  const el = document.getElementById(inputId);
+  const caret = el && typeof el.selectionStart === 'number' ? el.selectionStart : null;
+  ctx.refresh();
+  const fresh = document.getElementById(inputId);
+  if (!fresh) return;
+  fresh.focus();
+  const pos = caret == null ? fresh.value.length : Math.min(caret, fresh.value.length);
+  try { fresh.setSelectionRange(pos, pos); } catch { /* type not selectable */ }
+}
+
 const actions = (id) => (S.canWrite() ? `<div class="row" style="gap:6px">
     <button class="btn btn-secondary btn-sm" type="button" data-edit="${U.esc(id)}">Modifica</button>
     <button class="btn btn-danger btn-sm" type="button" data-del="${U.esc(id)}">Elimina</button>
@@ -143,7 +159,7 @@ export function viewLotti(root, ctx) {
     ${list.length > shown.length ? `<div class="mt"><button class="btn btn-secondary btn-block" type="button" id="more">Mostra altri ${Math.min(PAGE, list.length - shown.length)} lotti</button></div>` : ''}`;
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
-    state.lottiSearch = e.target.value; state.lottiLimit = PAGE; ctx.refresh();
+    state.lottiSearch = e.target.value; state.lottiLimit = PAGE; refreshKeepingCaret(ctx);
   }, 250));
   root.querySelector('#prod').addEventListener('change', (e) => {
     state.produttore = e.target.value; state.lottiLimit = PAGE; ctx.refresh();
@@ -355,7 +371,7 @@ export function viewOrdini(root, ctx) {
   });
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
     state.ordiniSearch = e.target.value;
-    ctx.refresh();
+    refreshKeepingCaret(ctx);
   }, 250));
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
@@ -720,7 +736,7 @@ export function viewViti(root, ctx) {
   });
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
-    state.vitiSearch = e.target.value; state.vitiLimit = 60; ctx.refresh();
+    state.vitiSearch = e.target.value; state.vitiLimit = 60; refreshKeepingCaret(ctx);
   }, 250));
   root.querySelector('#resetViti').addEventListener('click', () => {
     if (!state.vitiSearch && !state.vitiVarieta) return;
@@ -849,7 +865,7 @@ export function viewPortainnesti(root, ctx) {
     })}</div>`;
 
   root.querySelector('#q').addEventListener('input', U.debounce((e) => {
-    state.rootsSearch = e.target.value; ctx.refresh();
+    state.rootsSearch = e.target.value; refreshKeepingCaret(ctx);
   }, 250));
 
   const newBtn = root.querySelector('#newBtn');

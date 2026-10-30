@@ -38,6 +38,13 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 14. The search boxes keep the caret while the list refreshes
+
+Writing in «Cerca» (lotti, ordini, anagrafiche) or «Cerca codice» (portainnesti)
+no longer loses the cursor: the debounced refresh re-renders the list and then
+puts the focus back into the same field at the same position, so typing just
+continues. Verified in a real browser (typing `CH` then `A` gives `CHA`).
+
 ## 13. Variety and rootstock filters work for produttore and vendite
 
 Those roles cannot read the anagrafiche (RLS), so the filter comboboxes opened

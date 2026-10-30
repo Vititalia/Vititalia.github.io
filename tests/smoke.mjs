@@ -577,6 +577,29 @@ function setSelectIn(root, name, value) {
   el.dispatchEvent(new window.Event('change', { bubbles: true }));
 }
 
+/* ---------------- the search boxes keep the caret while they refresh ---------------- */
+{
+  await loginAs('admin');
+  for (const [hash, label] of [['#/dati/lotti', 'lotti'], ['#/dati/ordini', 'ordini'],
+                               ['#/anagrafiche/viti', 'viti'], ['#/anagrafiche/portainnesti', 'portainnesti']]) {
+    await go(hash);
+    const box = document.getElementById('q');
+    ok(!!box, `${label}: search box present`);
+    box.focus();
+    box.value = 'CH';
+    box.setSelectionRange(2, 2);
+    box.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await wait(400);                       // debounce + re-render
+    const after = document.getElementById('q');
+    ok(document.activeElement === after, `${label}: the search box keeps the focus after the refresh`);
+    ok(after.selectionStart === 2 && after.selectionEnd === 2,
+       `${label}: the caret stays at the end of the typed text (${after.selectionStart})`);
+    ok(after.value === 'CH', `${label}: the typed text survives the refresh (${after.value})`);
+    box.value = ''; box.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await wait(400);
+  }
+}
+
 /* ---------------- Nuovo impegno: the residual value is shown before saving ---------------- */
 {
   await loginAs('admin');

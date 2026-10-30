@@ -814,6 +814,34 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   await lotti.ctx.close();
 }
 
+/* ---------------- typing in a search box keeps the caret (real typing) ---------------- */
+{
+  for (const [route, label] of [['#/dati/lotti', 'lotti'], ['#/dati/ordini', 'ordini'],
+                                ['#/anagrafiche/portainnesti', 'portainnesti']]) {
+    const { page, ctx } = await open({ width: 1440, height: 900 }, route);
+    await page.click('#q');
+    await page.type('#q', 'CH', { delay: 40 });
+    await page.waitForTimeout(700);          // debounce (250) + re-render
+    const d = await page.evaluate(() => {
+      const el = document.getElementById('q');
+      return {
+        focused: document.activeElement === el,
+        caret: el.selectionStart,
+        value: el.value,
+        typedMore: (() => {
+          // the next keystroke must land in the same box, at the caret
+          el.setRangeText('A', el.selectionStart, el.selectionEnd, 'end');
+          return el.value;
+        })(),
+      };
+    });
+    ok(d.focused, `${label}: the search box keeps the focus after the automatic refresh`);
+    ok(d.caret === 2 && d.value === 'CH', `${label}: caret and text preserved (${d.value} @ ${d.caret})`);
+    ok(d.typedMore === 'CHA', `${label}: typing continues in the same box (${d.typedMore})`);
+    await ctx.close();
+  }
+}
+
 /* ------------------------- password sheets on a phone ---------------------- */
 {
   const { page, ctx } = await open({ width: 390, height: 844 }, '#/profilo');
