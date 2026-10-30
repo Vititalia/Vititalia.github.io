@@ -243,7 +243,9 @@ desktop = true;
   ok(shape.groups === 0, `no rootstock grouping (${shape.groups})`);
   ok(shape.subtotals > 0, `a subtotal row per rootstock (${shape.subtotals})`);
   ok(shape.totals === 1, `one grand total (${shape.totals})`);
-  ok(shape.cols.length === 6, `6 columns (${shape.cols.length}: ${shape.cols.join(' · ')})`);
+  ok(shape.cols.length === 8, `8 columns (${shape.cols.length}: ${shape.cols.join(' · ')})`);
+  ok(shape.cols.slice(-2).join('·') === 'Ripiantate·Frigoconservate',
+     `the two extra series close the table (${shape.cols.slice(-2).join(' · ')})`);
   ok(!shape.cols.includes('Da spedire'), 'the «Da spedire» column is gone');
   ok(shape.filters.some((l) => l.includes('Codice portainnesto')), 'rootstock filter present');
   ok(shape.tipologiaOpts.length === 4 && shape.tipologiaOpts.every(Boolean),

@@ -329,6 +329,10 @@ function subtotalRow(t) {
       { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
       { html: U.fmtQty(t.sped), cls: 'r metric', label: 'Di cui spedito' },
       { html: `<span class="${t.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(t.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
+      ...((t.ripiantate != null || t.frigoconservate != null) ? [
+        { html: U.fmtQty(t.ripiantate || 0), cls: 'r metric', label: 'Ripiantate' },
+        { html: U.fmtQty(t.frigoconservate || 0), cls: 'r metric', label: 'Frigoconservate' },
+      ] : []),
     ],
   };
 }
@@ -345,6 +349,7 @@ function cloneRow(row) {
       U.metric('Ordinato', U.fmtQty(row.ord)),
       U.metric('Di cui spedito', U.fmtQty(row.sped)),
       U.metric('Disponibilità', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
+      ...(('ripiantate' in row) ? extraCells(row) : []),
     ],
   };
 }
@@ -359,6 +364,10 @@ function grandTotalRow(totals) {
       { html: U.fmtQty(totals.ord), cls: 'r metric', label: 'Ordinato' },
       { html: U.fmtQty(totals.sped), cls: 'r metric', label: 'Di cui spedito' },
       { html: `<span class="${totals.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(totals.disponibilita)}</span>`, cls: 'r metric', label: 'Disponibilità' },
+      ...((totals.ripiantate != null || totals.frigoconservate != null) ? [
+        { html: U.fmtQty(totals.ripiantate || 0), cls: 'r metric', label: 'Ripiantate' },
+        { html: U.fmtQty(totals.frigoconservate || 0), cls: 'r metric', label: 'Frigoconservate' },
+      ] : []),
     ],
   };
 }
@@ -378,21 +387,22 @@ function availabilityRows(r) {
   return out;
 }
 
-function availabilityCsvRows(r) {
+function availabilityCsvRows(r, withExtra = true) {
   const out = [];
+  const tail = (row) => (withExtra ? [row.ripiantate || 0, row.frigoconservate || 0] : []);
   let prev = null;
   for (const row of r.rows) {
     if (grpKey(row) !== prev) {
       const t = r.subtotals.get(grpKey(row));
       out.push(['Totale per portainnesto', t.tipologia, t.produzione, t.varieta, '', t.portainnesto,
-                t.mag, t.ord, t.sped, t.disponibilita]);
+                t.mag, t.ord, t.sped, t.disponibilita, ...tail(t)]);
       prev = grpKey(row);
     }
     out.push([row.tipologia, row.produzione, row.varieta, row.clone, row.portainnesto,
-              row.mag, row.ord, row.sped, row.disponibilita]);
+              row.mag, row.ord, row.sped, row.disponibilita, ...tail(row)]);
   }
   out.push(['Totale generale', '', '', '', '', '',
-            r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita]);
+            r.totals.mag, r.totals.ord, r.totals.sped, r.totals.disponibilita, ...tail(r.totals)]);
   return out;
 }
 
@@ -400,10 +410,19 @@ const AVAILABILITY_COLS = [{ label: 'Codice clone' }, { label: 'Codice portainne
   { label: 'Magazzino', align: 'r' }, { label: 'Ordinato', align: 'r' },
   { label: 'Di cui spedito', align: 'r' }, { label: 'Disponibilità', align: 'r' }];
 
+/* the two optional series: warehouse quantity of the same clone/rootstock held
+ * as Ripiantato / Frigoconservato (PD-16, revealed by «Aggiungi altro») */
+const EXTRA_COLS = [{ label: 'Ripiantate', align: 'r' }, { label: 'Frigoconservate', align: 'r' }];
+const extraCells = (row) => [
+  U.metric('Ripiantate', U.fmtQty(row.ripiantate || 0)),
+  U.metric('Frigoconservate', U.fmtQty(row.frigoconservate || 0)),
+];
+
 /* Every export follows the same dimension order (PD-14):
  * Tipologia; Produzione; Codice varietà; Codice clone; Codice portainnesto; measures */
 const AVAILABILITY_CSV_HEADERS = ['Tipologia', 'Produzione', 'Codice varietà', 'Codice clone',
   'Codice portainnesto', 'Magazzino', 'Ordinato', 'Di cui spedito', 'Disponibilità'];
+const AVAILABILITY_CSV_EXTRA = ['Ripiantate', 'Frigoconservate'];
 
 export function viewDisponibilita(root, ctx) {
   const f = parseFilters(ctx.params, { mandatory: true });
@@ -435,13 +454,14 @@ export function viewDisponibilita(root, ctx) {
         wide: 'Prima il totale del portainnesto, poi i cloni che lo compongono. Rosso = disponibilità negativa.',
         narrow: 'Prima il totale del portainnesto, poi i cloni.',
       },
-      cols: AVAILABILITY_COLS,
+      cols: [...AVAILABILITY_COLS, ...EXTRA_COLS],
       rows: availabilityRows(r),
     })}</div>`;
   }
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
-    U.exportCSV(`disponibilita_${U.nowStamp()}.csv`, AVAILABILITY_CSV_HEADERS, availabilityCsvRows(r));
+    U.exportCSV(`disponibilita_${U.nowStamp()}.csv`,
+      [...AVAILABILITY_CSV_HEADERS, ...AVAILABILITY_CSV_EXTRA], availabilityCsvRows(r, true));
   });
 }
 

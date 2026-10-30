@@ -248,7 +248,7 @@ for (const w of [1024, 1440, 1920]) {
       rows: t.querySelectorAll('tbody tr.trow').length,
     };
   });
-  ok(r.cols === 6, `report 1: 6 columns, no «Da spedire» (${r.cols})`);
+  ok(r.cols === 8, `report 1: 8 columns (the two extra series at the end) (${r.cols})`);
   ok(r.groups === 0 && r.subs > 0, `report 1: no grouping but a subtotal per rootstock (${r.groups}/${r.subs})`);
   ok(r.totals === 1, `report 1: single grand-total row (${r.totals})`);
   ok(r.rootstockCells === r.rows, `report 1: every row carries its rootstock (${r.rootstockCells}/${r.rows})`);
@@ -728,7 +728,7 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
   ok(table.rowDisplay === 'table-row' && table.tdDisplay === 'table-cell',
      `phone: the table really is a table (${table.rowDisplay}/${table.tdDisplay})`);
   ok(table.thead !== 'none', 'phone table mode: header row visible');
-  ok(table.cols === 6, `phone table mode: same columns as the web (${table.cols})`);
+  ok(table.cols === 8, `phone table mode: same columns as the web (${table.cols})`);
   ok(table.scrolls, 'phone table mode: the table scrolls inside its panel');
   ok(table.overflow <= 1, 'phone table mode: the page itself does not scroll sideways');
 
@@ -756,7 +756,7 @@ for (const route of ['#/r/disponibilita', '#/r/produttore', '#/r/indisponibilita
 /* ------------------- subtotal first, notes, producer report ---------------- */
 {
   // report 1, per produttore: the subtotal opens the group (PD-7)
-  for (const [route, label, cells] of [['#/r/disponibilita', 'disponibilità', 6],
+  for (const [route, label, cells] of [['#/r/disponibilita', 'disponibilità', 8],
                                        ['#/r/indisponibilita', 'indisponibilità', 7],
                                        ['#/r/produttore', 'per produttore', 14]]) {
     const { page, ctx } = await open({ width: 1440, height: 1000 }, route);

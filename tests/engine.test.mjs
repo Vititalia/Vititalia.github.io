@@ -200,6 +200,34 @@ ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need
     'messo: the rootstock filter applies');
 }
 
+/* ---------- report 1: «Ripiantate» e «Frigoconservate» ---------- */
+{
+  const f = { tipologia: 'Barbatelle innestate', produzione: 'Nuova produzione' };
+  const r = reportDisponibilita(f);
+  ok(r.rows.every((x) => 'ripiantate' in x && 'frigoconservate' in x),
+     'report 1 always carries the two extra series');
+  // the value must be the warehouse quantity of the SAME combination in the other produzione
+  const withRip = r.rows.filter((x) => x.ripiantate > 0);
+  for (const row of withRip) {
+    const expected = store.lotti
+      .filter((l) => l.produzione === 'Ripiantato' && l.varieta === row.varieta
+        && l.clone === row.clone && l.portainnesto === row.portainnesto)
+      .reduce((a, l) => a + l.quantita, 0);
+    near(row.ripiantate, expected, `ripiantate for ${row.clone}`);
+  }
+  // the column belongs to the combination: combinations that exist *only* as
+  // Ripiantato have no row in this (produzione-filtered) report, so the total is
+  // the summed quantity of the rows, never more than all Ripiantato lots
+  const allRip = store.lotti.filter((l) => l.produzione === 'Ripiantato'
+    && l.tipologia === f.tipologia).reduce((a, l) => a + l.quantita, 0);
+  ok(r.totals.ripiantate === r.rows.reduce((a, x) => a + x.ripiantate, 0),
+     'the grand total is the sum of the row values');
+  ok(r.totals.ripiantate <= allRip, 'and never exceeds the Ripiantato stock');
+  near(r.totals.frigoconservate, 0, 'no Frigoconservato lots in the snapshot');
+  const sub = [...r.subtotals.values()].reduce((a, t) => a + t.ripiantate, 0);
+  near(sub, r.totals.ripiantate, 'the subtotals sum the extra series too');
+}
+
 /* ---------- filters ---------- */
 const varieta = store.index.varieta.find((v) => store.lotti.some((l) => l.varieta === v));
 const f1 = reportDisponibilita({ varieta });

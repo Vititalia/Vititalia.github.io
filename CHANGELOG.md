@@ -49,6 +49,15 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 17. Disponibilità gains «Ripiantate» and «Frigoconservate»
+
+After Disponibilità the table now carries the warehouse quantity of the same
+clone + rootstock held with `produzione = 'Ripiantato'` and
+`produzione = 'Frigoconservato'` — the two other production modes of the same
+plant. The values are attached to the combination, so they repeat on each row of
+it, and both the subtotals and the grand total sum them. Exports include the two
+columns.
+
 ## 16. An order can be saved with no lot at all
 
 The lot picker offers **«— Nessun lotto —»** as its first choice and the form has a

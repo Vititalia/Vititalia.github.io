@@ -317,6 +317,49 @@ const byRootstock = (C) => (a, b) =>
   C.compare(a.varieta, b.varieta) ||
   C.compare(a.clone, b.clone);
 
+/* The availability report also shows how much of the same clone/rootstock is held
+ * as «Ripiantato» and «Frigoconservato» — the two other production modes. The
+ * report itself is filtered on one produzione, so these two come from the same
+ * lots with a different produzione and are attached to every row of the
+ * combination (PD-16). */
+export const OTHER_PRODUCTIONS = { ripiantate: 'Ripiantato', frigoconservate: 'Frigoconservato' };
+const EXTRA_KEYS = ['ripiantate', 'frigoconservate'];
+
+const comboKey = (r) =>
+  [r.tipologia || NON_INDICATA, r.varieta, r.clone, r.portainnesto].join('\u0001');
+
+function otherProductionMap(filters) {
+  const f = filters || {};
+  const out = new Map();
+  const sidePasses = (r) =>
+    (!f.tipologia || (r.tipologia || NON_INDICATA) === f.tipologia) &&
+    (!f.varieta || r.varieta === f.varieta) &&
+    (!f.portainnesto || r.portainnesto === f.portainnesto);
+  const add = (r) => {
+    if (!sidePasses(r)) return;
+    const produzione = r.produzione || NON_INDICATA;
+    const k = comboKey(r);
+    if (!out.has(k)) out.set(k, { ripiantate: 0, frigoconservate: 0 });
+    const slot = out.get(k);
+    for (const [field, value] of Object.entries(OTHER_PRODUCTIONS)) {
+      if (produzione === value) slot[field] += Number(r.quantita || 0);
+    }
+  };
+  if (store.mode === 'supabase' && store.remote) {
+    // the aggregate view carries one row per produzione: enough to build the map
+    for (const r of store.remote.rows || []) {
+      add({
+        tipologia: r.tipologia || NON_INDICATA,
+        varieta: r.codice_varieta, clone: r.codice_clone, portainnesto: r.codice_portainnesto,
+        produzione: r.produzione || NON_INDICATA, quantita: Number(r.giacenza_magazzino || 0),
+      });
+    }
+    return out;
+  }
+  for (const l of store.lotti) add(l);
+  return out;
+}
+
 /** One subtotal per (tipologia, produzione, varietà, portainnesto). */
 function rootstockSubtotals(rows) {
   const out = new Map();
@@ -329,13 +372,17 @@ function rootstockSubtotals(rows) {
     const t = out.get(k);
     t.count += 1;
     for (const key of METRIC_KEYS) t[key] += r[key];
+    for (const key of EXTRA_KEYS) if (r[key] != null) t[key] = (t[key] || 0) + r[key];
   }
   return out;
 }
 
 function grandTotals(rows) {
   const t = zero();
-  for (const r of rows) for (const k of METRIC_KEYS) t[k] += r[k];
+  for (const r of rows) {
+    for (const k of METRIC_KEYS) t[k] += r[k];
+    for (const k of EXTRA_KEYS) if (r[k] != null) t[k] = (t[k] || 0) + r[k];
+  }
   return t;
 }
 
@@ -349,7 +396,10 @@ export function reportDisponibilita(filters) {
   // read the tables) fall through to the shared engine below
   if (store.mode === 'supabase' && store.remote) return reportFromView(filters);
   const C = collator();
-  const rows = [...metrics(filters).values()].sort(byRootstock(C));
+  const extra = otherProductionMap(filters);
+  const rows = [...metrics(filters).values()]
+    .map((r) => ({ ...r, ...(extra.get(comboKey(r)) || { ripiantate: 0, frigoconservate: 0 }) }))
+    .sort(byRootstock(C));
   return {
     rows,
     subtotals: rootstockSubtotals(rows),
@@ -443,12 +493,17 @@ function reportFromView(filters) {
     .filter((r) => !f.portainnesto || r.portainnesto === f.portainnesto)
     .sort(byRootstock(C));
 
+  // the extra series come from the same view (all produzioni, side filters only)
+  const extra = otherProductionMap(f);
+  const withExtra = rows.map((r) => ({ ...r,
+    ...(extra.get(comboKey(r)) || { ripiantate: 0, frigoconservate: 0 }) }));
+
   return {
-    rows,
-    subtotals: rootstockSubtotals(rows),
-    totals: grandTotals(rows),
-    negativeCount: rows.filter((r) => r.disponibilita < 0).length,
-    rowCount: rows.length,
+    rows: withExtra,
+    subtotals: rootstockSubtotals(withExtra),
+    totals: grandTotals(withExtra),
+    negativeCount: withExtra.filter((r) => r.disponibilita < 0).length,
+    rowCount: withExtra.length,
   };
 }
 
