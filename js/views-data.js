@@ -5,7 +5,7 @@ import * as P from './permissions.js';
 
 const PAGE = 40;
 /* one search term per list: a filter typed on one page must not leak into another */
-const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', vitiSearch: '', vitiVarieta: '', rootsSearch: '', produttore: '' };
+const state = { lottiLimit: PAGE, vitiLimit: 60, lottiSearch: '', ordiniSearch: '', vitiSearch: '', vitiVarieta: '', rootsSearch: '', produttore: '' };
 
 /* ------------------------------------------------------------- form bits */
 function selectHTML(name, label, options, value, extra = '') {
@@ -250,7 +250,12 @@ function openLottoForm(ctx, existing) {
 export function viewOrdini(root, ctx) {
   const C = S.collator();
   const lotOf = (o) => (o.id_magazzino ? S.store.index.lotById.get(o.id_magazzino) : null);
+  const q = state.ordiniSearch.trim().toLowerCase();
   const list = [...S.store.ordini]
+    .filter((o) => !q || [
+      o.varieta, o.clone, o.portainnesto, o.tipologia, o.produzione, o.note,
+      (lotOf(o) || {}).produttore, (lotOf(o) || {}).anno,
+    ].some((x) => String(x == null ? '' : x).toLowerCase().includes(q)))
     .sort((a, b) =>
       C.compare(a.varieta, b.varieta) ||
       C.compare(a.clone, b.clone) ||
@@ -271,8 +276,16 @@ export function viewOrdini(root, ctx) {
     </div></div>
 
     <div class="banner banner-info"><span aria-hidden="true">i</span>
-      <span>Ogni impegno è collegato a un lotto (<code>id_magazzino</code>): è così che la quantità entra
-      nella colonna del produttore nel riepilogo per produttore.</span></div>
+      <span>Collegando l'impegno a un lotto (<code>id_magazzino</code>) la quantità entra nella colonna del
+      produttore nel riepilogo per produttore.</span></div>
+
+    <div class="card card-pad mb">
+      <div class="filters" style="margin:0">
+        <label class="field" style="margin:0"><span>Cerca</span>
+          <input type="search" id="q" value="${U.esc(state.ordiniSearch)}"
+                 placeholder="produttore, varietà, clone, note…"></label>
+      </div>
+    </div>
 
     <div class="report">${U.buildTable({
       scroll: true, wrapperClass: 'no-max',
@@ -340,6 +353,11 @@ export function viewOrdini(root, ctx) {
       });
     });
   });
+  root.querySelector('#q').addEventListener('input', U.debounce((e) => {
+    state.ordiniSearch = e.target.value;
+    ctx.refresh();
+  }, 250));
+
   root.querySelector('#exportBtn').addEventListener('click', () => {
     // same headers as the import schema (plus `id`), notes included
     U.exportCSV(`ordini_impegni_${U.nowStamp()}.csv`,

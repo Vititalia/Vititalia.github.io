@@ -450,12 +450,29 @@ desktop = true;
     root: r.querySelector('td[data-label="Portainnesto"]')?.textContent.trim() || '',
   }));
   ok(rows.length > 0, `ordini: rows rendered (${rows.length})`);
+  ok(!!document.querySelector('#q'), 'ordini: the search box is there');
   ok(rows.every((r, i) => i === 0 ||
      C2.compare(rows[i - 1].varieta, r.varieta) < 0 ||
      (rows[i - 1].varieta === r.varieta &&
       (C2.compare(rows[i - 1].clone, r.clone) < 0 ||
        (rows[i - 1].clone === r.clone && C2.compare(rows[i - 1].root, r.root) <= 0)))),
      'ordini: sorted by varietà, clone, portainnesto');
+
+  /* the search narrows the list (variety, clone, note, producer…) */
+  const first = rows[0];
+  const box = document.getElementById('q');
+  box.value = first.clone;
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await wait(400);
+  const filtered = [...document.querySelectorAll('.grid tbody tr.trow')]
+    .map((r) => r.querySelector('td[data-label="Clone"]')?.textContent.trim() || '');
+  ok(filtered.length > 0 && filtered.length < rows.length,
+     `ordini: the search filters the list (${filtered.length} of ${rows.length})`);
+  ok(filtered.every((c) => c.toLowerCase().includes(first.clone.toLowerCase())),
+     'ordini: every filtered row matches the search');
+  document.getElementById('q').value = '';
+  document.getElementById('q').dispatchEvent(new window.Event('input', { bubbles: true }));
+  await wait(400);
 }
 
 /* ---------------- data entry: new lot ---------------- */

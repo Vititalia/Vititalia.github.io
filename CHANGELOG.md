@@ -12,6 +12,12 @@ red when negative). The previous Magazzino / Ordinato / Di cui spedito /
 Disponibilità set answered a different question; these three are the ones the
 producer actually reconciles.
 
+## 6. Ordini e impegni — search box
+
+The orders list gains the same search field as the lots screen: it matches
+produttore (of the linked lot), varietà, clone, portainnesto, tipologia,
+produzione, year and note text, and it filters the list in place.
+
 ## 7. Ordini e impegni sorted by varietà → clone → portainnesto → produttore
 
 Same reading order as the lots screen: variety first, then clone, then rootstock,
