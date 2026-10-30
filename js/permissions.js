@@ -54,7 +54,6 @@ export const CAPS = {
   'config.permessi': { admin: 1 },
 
   profilo: { admin: 1, ufficio: 1, produttore: 1, vendite: 1 },
-  'profilo.docs': { admin: 1 },        // project specification & mockup links
   'profilo.accounts': { admin: 1 },    // the list of registered users
 
   reportsTableView: { admin: 1, ufficio: 1, produttore: 1, vendite: 1 },

@@ -577,6 +577,18 @@ function setSelectIn(root, name, value) {
   el.dispatchEvent(new window.Event('change', { bubbles: true }));
 }
 
+/* ---------------- the demo-reset and documentation links are gone ---------------- */
+{
+  await loginAs('admin');
+  await go('#/config/utenti');
+  ok(!/Ripristina gli utenti dimostrativi/.test(text()), 'utenti: no «Ripristina gli utenti dimostrativi» button');
+  ok(!document.getElementById('resetRegistry'), 'utenti: the reset button is not in the DOM');
+  await go('#/profilo');
+  ok(!/Specifica/.test(text()) && !/Mockup/.test(text()), 'profilo: no specification/mockup links');
+  ok(!document.querySelector('a[href*="01-gui-specification"], a[href*="mockup"]'),
+     'profilo: no link points at the docs folder');
+}
+
 /* ---------------- the search boxes keep the caret while they refresh ---------------- */
 {
   await loginAs('admin');
@@ -670,7 +682,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await go('#/profilo');
   let prof = text();
   ok(!prof.includes('Account registrati'), 'vendite: other users are not listed');
-  ok(!/Specifica|Mockup/.test(prof), 'vendite: no specification/mockup links');
+  ok(!/Specifica|Mockup/.test(prof), 'vendite: no documentation links');
 
   /* Produttore: same profile restrictions, and no producer info either */
   await loginAs('produttore');
@@ -682,13 +694,13 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await go('#/profilo');
   prof = text();
   ok(!prof.includes('Account registrati'), 'produttore: other users are not listed');
-  ok(!/Specifica|Mockup/.test(prof), 'produttore: no specification/mockup links');
+  ok(!/Specifica|Mockup/.test(prof), 'produttore: no documentation links');
 
   /* Amministrazione: can manage users but no docs; Amministratore keeps the docs */
   await loginAs('ufficio');
   await go('#/profilo');
   prof = text();
-  ok(!/Specifica|Mockup/.test(prof), 'ufficio: no specification/mockup links');
+  ok(!/Specifica|Mockup/.test(prof), 'ufficio: no documentation links');
   ok(prof.includes('Gestione utenti'), 'ufficio: reached the user management panel');
   await go('#/home');
   ok([...document.querySelectorAll('.grid thead th')].some((t) => /Produttore/.test(t.textContent)),
@@ -697,7 +709,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   await loginAs('admin');
   await go('#/profilo');
   prof = text();
-  ok(/Specifica/.test(prof) && /Mockup/.test(prof), 'admin: keeps the documentation links');
+  ok(!/Specifica|Mockup/.test(prof), 'admin: the specification/mockup links are gone too');
   ok(prof.includes('Account registrati'), 'admin: sees the registered accounts');
   ok(!/Dati del dimostrativo/.test(prof) && !/Quantità sintetiche/.test(prof),
      'profilo: the «Dati del dimostrativo» card is gone');

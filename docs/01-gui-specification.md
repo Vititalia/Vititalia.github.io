@@ -1330,7 +1330,7 @@ App bar "Dati" + a centred card: lock icon, title "Inserimento dati disponibile 
 
 | Group | Rows |
 |---|---|
-| Account | Dati personali (read-only for non-admin), Cambia password. **The registered-account list and the specification/mockup links are visible to Amministratore only** |
+| Account | Dati personali (read-only for non-admin), Cambia password. **The registered-account list is visible to Amministratore only** |
 | Gestione | *Gestione utenti* — shown to Admin and Amministrazione |
 | Preferenze | Unità di misura visualizzata (if configurable), Formato numerico (it-IT, fixed), Dimensione testo della tabella (`md`+) |
 | Sessione | Disconnetti (danger text) |

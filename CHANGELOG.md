@@ -38,6 +38,17 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 15. Three links removed
+
+* **«Ripristina gli utenti dimostrativi»** (Utenti) — gone, together with its
+  confirmation sheet; the demo registry is still reset by the test suite through
+  `auth.resetRegistry()`.
+* **«Specifica»** and **«Mockup»** (Profilo) — gone; both files stay in the
+  repository under `docs/` for whoever needs them.
+
+The now-unused `profilo.docs` capability is removed from the permission table, so
+the in-app matrix lists exactly what the app offers.
+
 ## 14. The search boxes keep the caret while the list refreshes
 
 Writing in «Cerca» (lotti, ordini, anagrafiche) or «Cerca codice» (portainnesti)

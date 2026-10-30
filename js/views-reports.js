@@ -902,7 +902,6 @@ export function viewProfilo(root, ctx) {
   const seeAccounts = P.can(ctx.role, 'profilo.accounts');
   // demo only: edits live in localStorage, so they can be thrown away
   const hasLocalEdits = A.backend() === 'demo' && S.hasLocalEdits();
-  const seeDocs = P.can(ctx.role, 'profilo.docs');
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Profilo</p>
@@ -918,12 +917,9 @@ export function viewProfilo(root, ctx) {
           <button class="btn btn-danger btn-sm" type="button" id="logoutBtn">Disconnetti</button>
           ${P.can(ctx.role, 'config.utenti') ? '<a class="btn btn-secondary btn-sm" href="#/config/utenti">Gestione utenti</a>' : ''}
         </div>
-        ${(seeDocs || hasLocalEdits) ? `
+        ${hasLocalEdits ? `
         <div class="row mt">
-          ${hasLocalEdits ? '<button class="btn btn-ghost btn-sm" type="button" id="resetBtn">Azzera le modifiche locali</button>' : ''}
-          ${seeDocs ? `
-            <a class="btn btn-ghost btn-sm" href="docs/01-gui-specification.md">Specifica</a>
-            <a class="btn btn-ghost btn-sm" href="docs/mockups/fede-magazzino-mockup.drawio">Mockup</a>` : ''}
+          <button class="btn btn-ghost btn-sm" type="button" id="resetBtn">Azzera le modifiche locali</button>
         </div>` : ''}
       </section>
 
@@ -1060,11 +1056,7 @@ export function viewUtenti(root, ctx) {
             </div>`, label: 'Azioni' },
         ],
       })),
-    })}</div>
-
-    <div class="row mt">
-      <button class="btn btn-ghost btn-sm" type="button" id="resetRegistry">Ripristina gli utenti dimostrativi</button>
-    </div>`;
+    })}</div>`;
 
   let submitFn = null;
   const inviteBtn = root.querySelector('#inviteBtn');
@@ -1298,14 +1290,6 @@ export function viewUtenti(root, ctx) {
     });
   });
 
-  root.querySelector('#resetRegistry').addEventListener('click', () => {
-    U.confirmSheet({
-      title: 'Ripristinare gli utenti dimostrativi?',
-      message: 'Inviti, sospensioni e password personalizzate vengono azzerati.',
-      confirmLabel: 'Ripristina', danger: true,
-      onConfirm: () => { A.resetRegistry(); ctx.refresh(); U.toast('Utenti dimostrativi ripristinati'); },
-    });
-  });
 }
 
 /**
