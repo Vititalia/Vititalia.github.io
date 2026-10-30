@@ -439,6 +439,25 @@ desktop = true;
   ok(filtered.hl.length === 1 && filtered.hl[0] === 'Mori Marco', 'filtered column highlighted');
 }
 
+{
+  await loginAs('admin');
+  await go('#/dati/ordini');
+  const S3b = await import('../js/store.js');
+  const C2 = S3b.collator();
+  const rows = [...document.querySelectorAll('.grid tbody tr.trow')].map((r) => ({
+    varieta: r.querySelector('td[data-label="Varietà"]')?.textContent.trim() || '',
+    clone: r.querySelector('td[data-label="Clone"]')?.textContent.trim() || '',
+    root: r.querySelector('td[data-label="Portainnesto"]')?.textContent.trim() || '',
+  }));
+  ok(rows.length > 0, `ordini: rows rendered (${rows.length})`);
+  ok(rows.every((r, i) => i === 0 ||
+     C2.compare(rows[i - 1].varieta, r.varieta) < 0 ||
+     (rows[i - 1].varieta === r.varieta &&
+      (C2.compare(rows[i - 1].clone, r.clone) < 0 ||
+       (rows[i - 1].clone === r.clone && C2.compare(rows[i - 1].root, r.root) <= 0)))),
+     'ordini: sorted by varietà, clone, portainnesto');
+}
+
 /* ---------------- data entry: new lot ---------------- */
 await go('#/dati/lotti');
 const storeMod = await import('../js/store.js');

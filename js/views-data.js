@@ -248,7 +248,14 @@ function openLottoForm(ctx, existing) {
 
 /* ------------------------------------------------------- S-14 ordini */
 export function viewOrdini(root, ctx) {
-  const list = [...S.store.ordini].reverse();
+  const C = S.collator();
+  const lotOf = (o) => (o.id_magazzino ? S.store.index.lotById.get(o.id_magazzino) : null);
+  const list = [...S.store.ordini]
+    .sort((a, b) =>
+      C.compare(a.varieta, b.varieta) ||
+      C.compare(a.clone, b.clone) ||
+      C.compare(a.portainnesto, b.portainnesto) ||
+      C.compare((lotOf(a) || {}).produttore || '', (lotOf(b) || {}).produttore || ''));
   root.innerHTML = `
     <div class="page-head"><div>
       <p class="eyebrow">Dati / Ordini e impegni</p>

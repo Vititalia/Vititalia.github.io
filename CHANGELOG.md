@@ -12,6 +12,11 @@ red when negative). The previous Magazzino / Ordinato / Di cui spedito /
 Disponibilità set answered a different question; these three are the ones the
 producer actually reconciles.
 
+## 7. Ordini e impegni sorted by varietà → clone → portainnesto → produttore
+
+Same reading order as the lots screen: variety first, then clone, then rootstock,
+then the producer of the linked lot (orders without a lot come last).
+
 ## 8. Lotti magazzino sorted by varietà → clone → portainnesto → produttore
 
 The list no longer opens in reverse insertion order: it is ordered the way the
