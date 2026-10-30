@@ -3,6 +3,15 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## v1.0.1 — 2026-10-30
+
+Three changes on top of v1.0.0: the linked lot can be detached and saved as
+`NULL`; the availability report can show **Ripiantate** and **Frigoconservate**;
+those two columns stay hidden until the **«Aggiungi altro»** button is pressed.
+
+Rollback: `git checkout v1.0.1`, or redeploy it with
+`git push origin v1.0.1:main --force-with-lease`.
+
 ## v1.0.0 — 2026-10-30
 
 First release in production at <https://vititalia.github.io/> (repository
