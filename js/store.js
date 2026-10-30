@@ -133,6 +133,19 @@ async function initSupabase(role) {
     const messo = role === 'produttore'
       ? await fetchAll(c, 'vista_messo_a_disposizione', '*') : [];
     store.remote = { rows, negative, lots, messo };
+    // The anagrafiche are closed to these roles, so the filter comboboxes were
+    // empty: build the master-data index from the aggregate rows themselves —
+    // the codes that actually appear, which is exactly what can be filtered.
+    const all = [...rows, ...negative, ...messo];
+    const pairs = new Map();
+    for (const r of all) {
+      if (r.codice_varieta && r.codice_clone) {
+        pairs.set(r.codice_varieta + '\u0001' + r.codice_clone,
+          { varieta: r.codice_varieta, clone: r.codice_clone });
+      }
+    }
+    store.viti = [...pairs.values()];
+    store.portainnesti = [...new Set(all.map((r) => r.codice_portainnesto).filter(Boolean))];
   }
   rebuild();
   store.ready = true;

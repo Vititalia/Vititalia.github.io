@@ -38,6 +38,14 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 13. Variety and rootstock filters work for produttore and vendite
+
+Those roles cannot read the anagrafiche (RLS), so the filter comboboxes opened
+empty and the reports looked unfilterable. The master-data index is now built
+from the aggregate rows the view already returns — the codes that actually
+appear — so both comboboxes fill and the filter applies. «Mancanze» also gained
+the rootstock filter it was missing. Verified live as produttore and vendite.
+
 ## 12. Nuovo impegno shows the residual value before saving
 
 Above the save button the form now shows two figures — **Disponibilità attuale**

@@ -720,7 +720,8 @@ export function viewIndisponibilita(root, ctx) {
       <button class="btn btn-secondary btn-sm" type="button" id="exportBtn"${r.count ? '' : ' disabled'}>Esporta CSV</button>`,
   });
   filterBar(root.querySelector('#filterHost'), f,
-    (next) => ctx.navigate('#/r/indisponibilita' + serializeFilters(next)));
+    (next) => ctx.navigate('#/r/indisponibilita' + serializeFilters(next)),
+    { showPortainnesto: true });
 
   const host = root.querySelector('#reportHost');
   if (!r.count) {

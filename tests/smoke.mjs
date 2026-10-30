@@ -302,6 +302,10 @@ desktop = true;
       : lastRow.classList.contains('total'),
       `${label}: the table ends with ${hash === '#/r/indisponibilita' ? 'a clone row' : 'the grand total'}`);
   }
+  /* the shortage report offers both optional filters (variety and rootstock) */
+  ok(!!document.querySelector('#filterHost [id$="-combo"] input'), 'mancanze: variety filter present');
+  ok(!!document.querySelector('#filterHost [id$="-root"] input'), 'mancanze: rootstock filter present');
+
   /* the deficit subtotal is the sum of its group, shown as a negative number */
   await go('#/r/indisponibilita');
   const sub = document.querySelector('.grid tbody tr.subtotal');
