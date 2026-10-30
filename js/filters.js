@@ -81,10 +81,10 @@ export function filterBar(host, filters, onChange, opts = {}) {
         <span>Tipologia${mandatory.has('tipologia') ? ' <em class="req">obbligatoria</em>' : ''}</span>
         <select id="${tid}-tip" data-filter="tipologia">${options('tipologia', S.store.meta.tipologie)}</select>
       </label>
-      <label class="field" for="${tid}-prod" style="margin:0" ${showProduzione ? '' : 'hidden'}>
+      ${showProduzione ? `<label class="field" for="${tid}-prod" style="margin:0">
         <span>Produzione${mandatory.has('produzione') ? ' <em class="req">obbligatoria</em>' : ''}</span>
         <select id="${tid}-prod" data-filter="produzione">${options('produzione', S.store.meta.produzioni)}</select>
-      </label>
+      </label>` : ''}
       <div class="field" style="margin:0" ${showVarieta ? '' : 'hidden'}>
         <span>Codice varietà</span>
         <div id="${tid}-combo"></div>

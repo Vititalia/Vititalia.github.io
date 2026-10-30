@@ -263,7 +263,7 @@ desktop = true;
     tipologiaOpts: [...document.querySelectorAll('#filterHost select[data-filter="tipologia"] option')].map((o) => o.value),
     produzioneOpts: [...document.querySelectorAll('#filterHost select[data-filter="produzione"] option')].map((o) => o.value),
     tipologiaSel: document.querySelector('#filterHost select[data-filter="tipologia"]').value,
-    produzioneSel: document.querySelector('#filterHost select[data-filter="produzione"]').value,
+    produzioneSel: document.querySelector('#filterHost select[data-filter="produzione"]')?.value || null,
   };
   ok(shape.groups === 0, `no rootstock grouping (${shape.groups})`);
   ok(shape.subtotals > 0, `a subtotal row per rootstock (${shape.subtotals})`);
@@ -276,9 +276,8 @@ desktop = true;
   ok(shape.filters.some((l) => l.includes('Codice portainnesto')), 'rootstock filter present');
   ok(shape.tipologiaOpts.length === 4 && shape.tipologiaOpts.every(Boolean),
      `tipologia mandatory: no empty option (${shape.tipologiaOpts.length})`);
-  const prodWrap = document.querySelector('#filterHost select[data-filter="produzione"]')?.closest('label');
-  ok(!prodWrap || prodWrap.hidden,
-     'the «Produzione» filter is not shown on this report');
+  ok(!document.querySelector('#filterHost select[data-filter="produzione"]'),
+     'the «Produzione» filter is not rendered on this report');
   ok(shape.tipologiaSel === 'Barbatelle innestate', `tipologia default applied (${shape.tipologiaSel})`);
   ok(/quantità di Nuova produzione/.test(text()), 'the header states the fixed produzione');
   ok(text().includes('Totale per portainnesto'), 'subtotal labelled «Totale per portainnesto»');
