@@ -440,9 +440,10 @@ function reportFromView(filters) {
 }
 
 /**
- * Report 5 — what *one* producer put into the warehouse, with the commitments
- * placed against those lots. Same columns and same per-rootstock subtotals as
- * Report 1; `grower` comes from the session (live: filtered by the view itself).
+ * Report 5 — what *one* producer put into the warehouse: «Messo a disposizione»
+ * (their lots), «Spedito» (their orders already shipped) and «A magazzino»
+ * (the difference). Per-rootstock subtotals as in Report 1; `grower` comes from
+ * the session (live: the view is already filtered by auth_grower()).
  */
 export function reportMessoADisposizione(filters, grower) {
   const f = filters || {};
@@ -459,7 +460,8 @@ export function reportMessoADisposizione(filters, grower) {
         ord: Number(r.quantita_ordinata || 0),
         sped: Number(r.quantita_spedita || 0),
         daSpedire: Number(r.quantita_ordinata || 0) - Number(r.quantita_spedita || 0),
-        disponibilita: Number(r.quantita_magazzino || 0) - Number(r.quantita_ordinata || 0),
+        // «A magazzino»: what is left once the shipped quantity has gone out
+        disponibilita: Number(r.quantita_magazzino || 0) - Number(r.quantita_spedita || 0),
       }));
   } else {
     rows = [];
@@ -472,7 +474,8 @@ export function reportMessoADisposizione(filters, grower) {
         rows.push({
           tipologia: e.tipologia, produzione: e.produzione, varieta: e.varieta,
           clone: e.clone, portainnesto: e.portainnesto,
-          mag, ord, sped, daSpedire: ord - sped, disponibilita: mag - ord,
+          mag, ord, sped, daSpedire: ord - sped,
+          disponibilita: mag - sped,     // «A magazzino» = messo a disposizione − spedito
         });
       }
     }

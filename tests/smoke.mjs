@@ -320,9 +320,9 @@ desktop = true;
   await loginAs('produttore');
   await go('#/r/messodisposizione');
   const cols = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
-  ok(cols.length === 6, `messo: six columns like the availability report (${cols.length})`);
-  ok(cols.join('·') === 'Codice clone·Codice portainnesto·Magazzino·Ordinato·Di cui spedito·Disponibilità',
-     `messo: same columns as report 1 (${cols.join('·')})`);
+  ok(cols.length === 5, `messo: five columns (${cols.length})`);
+  ok(cols.join('·') === 'Codice clone·Codice portainnesto·Messo a disposizione·Spedito·A magazzino',
+     `messo: the producer's own quantities (${cols.join('·')})`);
   ok(text().includes('Mori Marco'), 'messo: the screen names the linked producer');
   const growerSel = document.querySelector('#filterHost [data-filter="produttore"]');
   ok(!growerSel || growerSel.closest('label').hidden,
@@ -338,8 +338,8 @@ desktop = true;
   /* the totals row drives the numbers: magazzino - ordinato = disponibilità */
   const cells = [...document.querySelectorAll('.grid tbody tr.total td.metric')]
     .map((td) => Number(td.textContent.replace(/[^\d−-]/g, '').replace('\u2212', '-')));
-  ok(cells.length === 4, `messo: four numeric totals (${cells.length})`);
-  ok(cells[3] === cells[0] - cells[1], `messo: disponibilità = magazzino - ordinato (${cells.join(',')})`);
+  ok(cells.length === 3, `messo: three numeric totals (${cells.length})`);
+  ok(cells[2] === cells[0] - cells[1], `messo: «A magazzino» = messo a disposizione - spedito (${cells.join(',')})`);
 }
 
 /* ---------------- ordini: the note in read mode + CSV exports ---------------- */

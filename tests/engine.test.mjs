@@ -169,11 +169,12 @@ ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need
   ok(rm.rows.length > 0, `messo a disposizione returns rows (${g})`);
   ok(rm.grower === g, 'the report carries the producer it belongs to');
   ok(rm.rows.every((r) => r.mag > 0 || r.ord > 0 || r.sped > 0), 'only combinations with records');
-  ok(rm.rows.every((r) => r.disponibilita === r.mag - r.ord), 'messo: disponibilità = magazzino - ordinato');
+  ok(rm.rows.every((r) => r.disponibilita === r.mag - r.sped),
+     'messo: «A magazzino» = messo a disposizione - spedito');
   ok(rm.rows.every((r) => r.daSpedire === r.ord - r.sped), 'messo: da spedire = ordinato - spedito');
   near(rm.totals.mag, store.lotti.filter((l) => l.produttore === g)
     .reduce((a, l) => a + l.quantita, 0), 'messo: magazzino is that producer’s own stock');
-  near(rm.totals.disponibilita, rm.totals.mag - rm.totals.ord, 'messo: grand total disponibilità');
+  near(rm.totals.disponibilita, rm.totals.mag - rm.totals.sped, 'messo: grand total «A magazzino»');
   const groups = new Set(rm.rows.map((r) => subtotalKey(r)));
   near(rm.subtotals.size, groups.size, 'messo: one subtotal per (rootstock, variety) group');
   let sumSubs = 0;
@@ -184,8 +185,11 @@ ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need
   }
   near(sumSubs, rm.totals.mag, 'messo: the subtotals add up to the grand total');
   // the producer's column in report 2 must agree with report 5
-  near(rm.totals.disponibilita, r2.totals.per[g],
-    "messo: the grand total equals that producer's column in report 2");
+  /* report 2's grower column is mag − ord; «A magazzino» is mag − sped, so the
+     two only coincide when that grower has nothing unshipped */
+  near(rm.totals.sped, store.ordini.filter((o) => o.spedito &&
+      store.index.lotById.get(o.id_magazzino)?.produttore === g)
+    .reduce((a, o) => a + o.quantita, 0), 'messo: «Spedito» is that producer’s shipped quantity');
   ok(reportMessoADisposizione({}, null).rows.length === 0, 'no producer → no rows (nothing to show)');
   const other = store.meta.produttori.find((x) => x !== g &&
     store.lotti.some((l) => l.produttore === x));

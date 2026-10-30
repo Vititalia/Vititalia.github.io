@@ -441,7 +441,55 @@ export function viewDisponibilita(root, ctx) {
 }
 
 /* --------------------------------- S-23 «Messo a disposizione» (produttore) */
-/** Same table as Report 1, limited to the lots the signed-in producer supplied. */
+const MESSO_COLS = [{ label: 'Codice clone' }, { label: 'Codice portainnesto' },
+  { label: 'Messo a disposizione', align: 'r' }, { label: 'Spedito', align: 'r' },
+  { label: 'A magazzino', align: 'r' }];
+
+const MESSO_CSV_HEADERS = ['Codice clone', 'Codice portainnesto',
+  'Messo a disposizione', 'Spedito', 'A magazzino'];
+
+function messoAggregateRow(t, type) {
+  return {
+    type,
+    cells: [
+      { html: type === 'subtotal' ? `Totale per portainnesto<small>${U.esc(t.varieta || '')}</small>`
+                                  : 'Totale generale', cls: 'ident' },
+      { html: type === 'subtotal' ? `<span class="ident">${U.esc(t.portainnesto)}</span>` : '',
+        label: 'Portainnesto', cls: 'cell-sub' },
+      { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Messo a disposizione' },
+      { html: U.fmtQty(t.sped), cls: 'r metric', label: 'Spedito' },
+      { html: `<span class="${t.disponibilita < 0 ? 'neg' : ''}">${U.fmtSigned(t.disponibilita)}</span>`,
+        cls: 'r metric', label: 'A magazzino' },
+    ],
+  };
+}
+
+function messoRows(r) {
+  const out = [];
+  let prev = null;
+  for (const row of r.rows) {
+    if (grpKey(row) !== prev) {
+      out.push(messoAggregateRow(r.subtotals.get(grpKey(row)), 'subtotal'));
+      prev = grpKey(row);
+    }
+    const neg = row.disponibilita < 0;
+    out.push({
+      type: 'row',
+      cls: neg ? 'trow negative' : 'trow',
+      cells: [
+        { html: `${neg ? '⚠ ' : ''}${U.esc(row.clone)}<small>${U.esc(row.varieta)}</small>`, cls: 'ident' },
+        { html: `<span class="ident">${U.esc(row.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
+        U.metric('Messo a disposizione', U.fmtQty(row.mag)),
+        U.metric('Spedito', U.fmtQty(row.sped)),
+        U.metric('A magazzino', U.fmtSigned(row.disponibilita), { negative: neg, cls: 'disp' }),
+      ],
+    });
+  }
+  if (r.rows.length) out.push(messoAggregateRow(r.totals, 'total'));
+  return out;
+}
+
+/** Same structure as Report 1, with the producer's own three quantities. */
 export function viewMessoADisposizione(root, ctx) {
   const f = parseFilters(ctx.params, { mandatory: true });
   const grower = (ctx.session && ctx.session.grower) || null;
@@ -483,22 +531,32 @@ export function viewMessoADisposizione(root, ctx) {
   } else {
     host.innerHTML = `
       <div class="banner banner-info"><span aria-hidden="true">i</span>
-        <span>Solo i lotti conferiti da <b>${U.esc(grower)}</b>, con gli impegni registrati su quei lotti.
-        Il totale del portainnesto precede i cloni che lo compongono.</span></div>
+        <span>Solo i lotti conferiti da <b>${U.esc(grower)}</b>: «Messo a disposizione» è la quantità entrata a
+        magazzino, «Spedito» quella uscita con gli impegni collegati a quei lotti, «A magazzino» la differenza.</span></div>
       <div class="report${table ? ' table-mode' : ''}">${U.buildTable({
         scroll: table,
         caption: {
-          wide: 'Prima il totale del portainnesto, poi i cloni conferiti da te. Rosso = disponibilità negativa.',
+          wide: 'Prima il totale del portainnesto, poi i cloni conferiti da te. «A magazzino» = messo a disposizione − spedito: rosso quando è negativo.',
           narrow: 'Prima il totale del portainnesto, poi i tuoi cloni.',
         },
-        cols: AVAILABILITY_COLS,
-        rows: availabilityRows(r),
+        cols: MESSO_COLS,
+        rows: messoRows(r),
       })}</div>`;
   }
 
   root.querySelector('#exportBtn').addEventListener('click', () => {
-    U.exportCSV(`messo_a_disposizione_${U.nowStamp()}.csv`,
-      AVAILABILITY_CSV_HEADERS, availabilityCsvRows(r));
+    const out = [];
+    let prev = null;
+    for (const row of r.rows) {
+      if (grpKey(row) !== prev) {
+        const t = r.subtotals.get(grpKey(row));
+        out.push(['Totale per portainnesto', t.portainnesto, t.mag, t.sped, t.disponibilita]);
+        prev = grpKey(row);
+      }
+      out.push([row.clone, row.portainnesto, row.mag, row.sped, row.disponibilita]);
+    }
+    out.push(['Totale generale', '', r.totals.mag, r.totals.sped, r.totals.disponibilita]);
+    U.exportCSV(`messo_a_disposizione_${U.nowStamp()}.csv`, MESSO_CSV_HEADERS, out);
   });
 }
 

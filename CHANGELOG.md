@@ -3,6 +3,15 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 4. «Messo a disposizione» — the producer's own three quantities
+
+The producer report now shows **Messo a disposizione** (the quantity that entered
+the warehouse from their lots), **Spedito** (what left through the shipped
+commitments on those lots) and **A magazzino** (the difference between the two,
+red when negative). The previous Magazzino / Ordinato / Di cui spedito /
+Disponibilità set answered a different question; these three are the ones the
+producer actually reconciles.
+
 ## 5. «Totale per portainnesto» never mixes varieties
 
 The subtotal row is now keyed by **tipologia + produzione + varietà +
