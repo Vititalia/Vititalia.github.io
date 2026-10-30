@@ -437,12 +437,25 @@ function openOrdineForm(ctx, existing) {
       function updateImpact() {
         if (!form || !form.isConnected) return;
         const data = Object.fromEntries(new FormData(form).entries());
+        data.previousQuantita = existing ? Number(existing.quantita) || 0 : 0;
         const box = form.querySelector('#impact');
         if (!data.varieta || !data.clone || !data.quantita) { box.innerHTML = ''; return; }
         const { before, after } = S.availabilityImpact(data);
-        box.innerHTML = after < 0
-          ? `<div class="banner banner-warn"><span aria-hidden="true">⚠</span><span>Disponibilità andrà sotto zero: da ${U.fmtSigned(before)} a <b>${U.fmtSigned(after)}</b>. Verrà segnalata in Mancanze.</span></div>`
-          : '';
+        // the residual value is always shown, so the office knows what will be left
+        box.innerHTML = `
+          <div class="impact">
+            <div class="impact-item">
+              <span class="impact-label">Disponibilità attuale</span>
+              <b class="impact-value${before < 0 ? ' neg' : ''}">${U.fmtSigned(before)}</b>
+            </div>
+            <div class="impact-item">
+              <span class="impact-label">Residuo dopo il salvataggio</span>
+              <b class="impact-value${after < 0 ? ' neg' : ''}">${U.fmtSigned(after)}</b>
+            </div>
+          </div>
+          ${after < 0
+            ? `<div class="banner banner-warn" style="margin-top:8px"><span aria-hidden="true">⚠</span><span>La disponibilità andrà sotto zero (${U.fmtSigned(before)} → <b>${U.fmtSigned(after)}</b>): l'impegno verrà segnalato in Mancanze.</span></div>`
+            : ''}`;
       }
       async function submit() {
         if (!form || !form.isConnected) return;

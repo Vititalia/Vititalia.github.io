@@ -573,6 +573,40 @@ function setSelectIn(root, name, value) {
   el.dispatchEvent(new window.Event('change', { bubbles: true }));
 }
 
+/* ---------------- Nuovo impegno: the residual value is shown before saving ---------------- */
+{
+  await loginAs('admin');
+  await go('#/dati/ordini');
+  const S5 = await import('../js/store.js');
+  const U5 = await import('../js/ui.js');
+  const lot = S5.store.lotti.find((l) => l.quantita > 100 && l.produttore);
+  const btn = document.getElementById('newBtn');
+  btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(40);
+  const form = document.querySelector('#ordForm');
+  ok(!!form, 'order form opens');
+  form.elements.id_magazzino.value = lot.id;
+  form.elements.tipologia.value = lot.tipologia;
+  form.elements.produzione.value = lot.produzione;
+  form.elements.varieta.value = lot.varieta;
+  form.elements.portainnesto.value = lot.portainnesto;
+  form.elements.clone.innerHTML = `<option value="${lot.clone}" selected>${lot.clone}</option>`;
+  form.elements.clone.disabled = false;
+  form.elements.quantita.value = '10';
+  form.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await wait(450);
+  const impact = document.querySelector('#impact');
+  ok(/Residuo dopo il salvataggio/.test(impact.textContent), 'order form: the residual value is labelled');
+  ok(/Disponibilità attuale/.test(impact.textContent), 'order form: the current availability is shown too');
+  const values = [...impact.querySelectorAll('.impact-value')].map((n) => n.textContent.trim());
+  ok(values.length === 2, `order form: two values (${values.join(' → ')})`);
+  const { before, after } = S5.availabilityImpact({ ...lot, quantita: 10 });
+  ok(values[0] === U5.fmtSigned(before) && values[1] === U5.fmtSigned(after),
+     `order form: the residual matches the engine (${values.join(' → ')} vs ${U5.fmtSigned(before)} → ${U5.fmtSigned(after)})`);
+  document.querySelector('#sheetRoot [data-close]').click();
+  await wait(30);
+}
+
 /* ---------------- master data ---------------- */
 await go('#/anagrafiche/portainnesti');
 const rootsBefore = storeMod.store.portainnesti.length;

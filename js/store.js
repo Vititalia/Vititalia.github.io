@@ -654,9 +654,11 @@ export function availabilityImpact(o) {
   const m = metrics({ tipologia: o.tipologia, produzione: o.produzione, varieta: o.varieta });
   const key = [o.tipologia, o.produzione, o.varieta, o.clone, o.portainnesto].join('\u0001');
   const e = m.get(key);
-  const before = e ? e.disponibilita : 0;
+  // when editing, the order being edited is already counted in `before`
+  const previous = Number(o.previousQuantita || 0);
+  const before = (e ? e.disponibilita : 0) + previous;
   const after = before - Number(o.quantita || 0);
-  return { before, after };
+  return { before, after, residual: after };
 }
 
 /* ------------------------------------------------------------ mutations */

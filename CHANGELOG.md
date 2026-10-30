@@ -38,6 +38,16 @@ Italian CLDR rules deliberately leave four-digit numbers ungrouped. It applies t
 every table, card, subtotal and toast (report cells, lots, orders, anagrafiche,
 KPIs). Negative values keep the leading `−` (`−1.234`).
 
+## 12. Nuovo impegno shows the residual value before saving
+
+Above the save button the form now shows two figures — **Disponibilità attuale**
+and **Residuo dopo il salvataggio** — updated as the operator types, in place of
+the old warning that appeared only once the value went negative. When the
+residual is negative the warning stays, with the before → after pair.
+
+Editing an existing order no longer double-counts it: the previous quantity is
+added back before the subtraction.
+
 ## 9. The linked lot is optional on an order
 
 «Nuovo impegno» no longer requires a lot: the label lost «(obbligatorio)», the
