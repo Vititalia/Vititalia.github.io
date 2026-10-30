@@ -276,8 +276,8 @@ export function viewOrdini(root, ctx) {
     </div></div>
 
     <div class="banner banner-info"><span aria-hidden="true">i</span>
-      <span>Collegando l'impegno a un lotto (<code>id_magazzino</code>) la quantità entra nella colonna del
-      produttore nel riepilogo per produttore.</span></div>
+      <span>Il lotto collegato è <b>facoltativo</b>: se lo scegli, la quantità entra nella colonna del
+      produttore nel riepilogo per produttore; senza lotto l'impegno resta fuori da quelle colonne.</span></div>
 
     <div class="card card-pad mb">
       <div class="filters" style="margin:0">
@@ -387,7 +387,7 @@ function openOrdineForm(ctx, existing) {
     title: isEdit ? 'Modifica impegno' : 'Nuovo impegno',
     body: `
       <form id="ordForm" novalidate>
-        <label class="field"><span>Lotto collegato (obbligatorio)</span><div data-lot></div></label>
+        <label class="field"><span>Lotto collegato</span><div data-lot></div></label>
         <input type="hidden" name="id_magazzino" value="${existing && existing.id_magazzino ? existing.id_magazzino : ''}">
         ${selectHTML('tipologia', 'Tipologia', S.store.meta.tipologie, existing && existing.tipologia)}
         ${selectHTML('produzione', 'Produzione', S.store.meta.produzioni, existing && existing.produzione)}
@@ -448,8 +448,7 @@ function openOrdineForm(ctx, existing) {
         if (!form || !form.isConnected) return;
         const data = Object.fromEntries(new FormData(form).entries());
         data.spedito = form.elements.spedito.checked;
-        const errs = S.validateOrdine(data);
-        if (!data.id_magazzino) errs.id_magazzino = 'Collega l\'impegno a un lotto.';
+        const errs = S.validateOrdine(data);   // the lot link is optional
         const keys = Object.keys(errs);
         const box = form.querySelector('#formErr');
         if (keys.length) {
@@ -617,9 +616,6 @@ function validateRows(rows, headers, kind) {
           id_magazzino: pick(row, 'id_magazzino') || null,
         };
     const errs = kind === 'lotti' ? S.validateLotto(rec) : S.validateOrdine(rec);
-    if (kind === 'ordini' && !rec.id_magazzino) {
-      errs.id_magazzino = 'Lotto collegato mancante (colonna id_magazzino)';
-    }
     const local = [];
     for (const [col, motivo] of Object.entries(errs)) {
       local.push({ riga, colonna: col, valore: rec[col] || '(vuoto)', motivo });

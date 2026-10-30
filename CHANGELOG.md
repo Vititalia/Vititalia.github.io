@@ -23,6 +23,13 @@ produzione, year and note text, and it filters the list in place.
 Same reading order as the lots screen: variety first, then clone, then rootstock,
 then the producer of the linked lot (orders without a lot come last).
 
+## 9. The linked lot is optional on an order
+
+«Nuovo impegno» no longer requires a lot: the label lost «(obbligatorio)», the
+form and the CSV import accept a row without `id_magazzino`, and the info banner
+explains the consequence (the quantity simply stays out of the per-grower
+columns). The per-grower report keeps warning when such rows exist.
+
 ## 8. Lotti magazzino sorted by varietà → clone → portainnesto → produttore
 
 The list no longer opens in reverse insertion order: it is ordered the way the

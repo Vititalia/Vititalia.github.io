@@ -788,8 +788,12 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
     spedito: false, note: 'api ordine',
   }, null);
   ok(ord.ok && ord.ordine.id_magazzino === made.lot.id, 'saveOrdine links the order to its lot (demo)');
-  const noLot = await S4.saveOrdine({ tipologia: 'x', produzione: 'y', varieta: 'z', clone: 'c', portainnesto: 'r', quantita: 1 }, null);
-  ok(!noLot.ok, 'saveOrdine refuses an order without a lot');
+  const noLot = await S4.saveOrdine({
+    tipologia: lot.tipologia, produzione: lot.produzione, varieta: lot.varieta,
+    clone: lot.clone, portainnesto: lot.portainnesto, quantita: 7, spedito: false,
+  }, null);
+  ok(noLot.ok && noLot.ordine.id_magazzino === null,
+     'saveOrdine accepts an order without a lot (the link is optional)');
   const guard = await S4.removeLotto(made.lot.id);
   ok(!guard.ok && /impegno/i.test(guard.error), 'removeLotto refuses a lot an order points at');
 
@@ -798,6 +802,7 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   const unshipped = await S4.setSpedito(ord.ordine.id, false);
   ok(unshipped.ok && unshipped.ordine.spedito === false, 'setSpedito can revert it');
 
+  await S4.removeOrdine(noLot.ordine.id);
   await S4.removeOrdine(ord.ordine.id);
   const removed = await S4.removeLotto(made.lot.id);
   ok(removed.ok && !S4.store.lotti.some((l) => l.note === 'api test'), 'the test lot and order are removed');

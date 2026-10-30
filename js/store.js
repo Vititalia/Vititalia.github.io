@@ -987,8 +987,7 @@ export async function removeLotto(id) {
 
 /* ---- ordini ---- */
 export async function saveOrdine(values, existingId) {
-  const errs = validateOrdine(values);
-  if (!values.id_magazzino) errs.id_magazzino = 'Collega l\'impegno a un lotto.';
+  const errs = validateOrdine(values);   // the lot link is optional (PD-13)
   if (Object.keys(errs).length) return { ok: false, error: firstError(errs), errors: errs };
   if (!liveWrites()) {
     if (existingId) return { ok: true, ordine: updateOrdine(existingId, values) };
