@@ -314,13 +314,16 @@ function reportShell(root, { eyebrow, title, sub, actions = '' }) {
 /* ----------------------------------------------- S-04/S-05 disponibilità */
 /* Report 1 and report 5 («Messo a disposizione») share this rendering: one
  * subtotal per rootstock *at the start of its group*, then the per-clone
- * lines it summarises (PD-7). */
+ * lines it summarises (PD-7). A subtotal never crosses a variety: its key is
+ * tipologia + produzione + varietà + portainnesto (PD-12). */
+
+const grpKey = (r) => S.subtotalKey(r);
 
 function subtotalRow(t) {
   return {
     type: 'subtotal',
     cells: [
-      { html: 'Totale per portainnesto', cls: 'ident' },
+      { html: `Totale per portainnesto<small>${U.esc(t.varieta || '')}</small>`, cls: 'ident' },
       { html: `<span class="ident">${U.esc(t.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
       { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Magazzino' },
       { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
@@ -365,9 +368,9 @@ function availabilityRows(r) {
   const out = [];
   let prev = null;
   for (const row of r.rows) {
-    if (row.portainnesto !== prev) {
-      out.push(subtotalRow(r.subtotals.get(row.portainnesto)));
-      prev = row.portainnesto;
+    if (grpKey(row) !== prev) {
+      out.push(subtotalRow(r.subtotals.get(grpKey(row))));
+      prev = grpKey(row);
     }
     out.push(cloneRow(row));
   }
@@ -379,10 +382,10 @@ function availabilityCsvRows(r) {
   const out = [];
   let prev = null;
   for (const row of r.rows) {
-    if (row.portainnesto !== prev) {
-      const t = r.subtotals.get(row.portainnesto);
+    if (grpKey(row) !== prev) {
+      const t = r.subtotals.get(grpKey(row));
       out.push(['Totale per portainnesto', '', t.portainnesto, t.mag, t.ord, t.sped, t.disponibilita]);
-      prev = row.portainnesto;
+      prev = grpKey(row);
     }
     out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped, row.disponibilita]);
   }
@@ -519,7 +522,7 @@ function perProduttoreSubtotalRow(t, growers, hl) {
   return {
     type: 'subtotal',
     cells: [
-      { html: 'Totale per portainnesto', cls: 'ident' },
+      { html: `Totale per portainnesto<small>${U.esc(t.varieta || '')}</small>`, cls: 'ident' },
       { html: `<span class="ident">${U.esc(t.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
       { html: U.fmtQty(t.mag), cls: 'r metric', label: 'Magazzino' },
       { html: U.fmtQty(t.ord), cls: 'r metric', label: 'Ordinato' },
@@ -563,9 +566,9 @@ export function viewPerProduttore(root, ctx) {
   const rows = [];
   let prev = null;
   for (const row of r.rows) {
-    if (row.portainnesto !== prev) {
-      rows.push(perProduttoreSubtotalRow(r.subtotals.get(row.portainnesto), r.growers, hl));
-      prev = row.portainnesto;
+    if (grpKey(row) !== prev) {
+      rows.push(perProduttoreSubtotalRow(r.subtotals.get(grpKey(row)), r.growers, hl));
+      prev = grpKey(row);
     }
     rows.push({
       type: 'row',
@@ -620,11 +623,11 @@ export function viewPerProduttore(root, ctx) {
     const out = [];
     let prevRoot = null;
     for (const row of r.rows) {
-      if (row.portainnesto !== prevRoot) {
-        const t = r.subtotals.get(row.portainnesto);
+      if (grpKey(row) !== prevRoot) {
+        const t = r.subtotals.get(grpKey(row));
         out.push(['Totale per portainnesto', '', t.portainnesto, t.mag, t.ord, t.sped,
           t.disponibilita, ...r.growers.map((g) => t.per[g])]);
-        prevRoot = row.portainnesto;
+        prevRoot = grpKey(row);
       }
       out.push([row.clone, row.varieta, row.portainnesto, row.mag, row.ord, row.sped,
         row.disponibilita, ...r.growers.map((g) => row.per[g])]);
@@ -669,7 +672,7 @@ export function viewIndisponibilita(root, ctx) {
   const subRow = (t) => ({
     type: 'subtotal',
     cells: [
-      { html: 'Totale per portainnesto', cls: 'ident' },
+      { html: `Totale per portainnesto<small>${U.esc(t.varieta || '')}</small>`, cls: 'ident' },
       { html: '', label: 'Tipologia', cls: 'ctx' },
       { html: '', label: 'Produzione', cls: 'ctx' },
       { html: `<span class="ident">${U.esc(t.portainnesto)}</span>`, label: 'Portainnesto', cls: 'cell-sub' },
@@ -682,9 +685,9 @@ export function viewIndisponibilita(root, ctx) {
   const rows = [];
   let prev = null;
   for (const row of r.rows) {
-    if (row.portainnesto !== prev) {
-      rows.push(subRow(r.subtotals.get(row.portainnesto)));
-      prev = row.portainnesto;
+    if (grpKey(row) !== prev) {
+      rows.push(subRow(r.subtotals.get(grpKey(row))));
+      prev = grpKey(row);
     }
     rows.push({
       type: 'row', cls: 'trow negative',
@@ -719,10 +722,10 @@ export function viewIndisponibilita(root, ctx) {
     const out = [];
     let prevRoot = null;
     for (const x of r.rows) {
-      if (x.portainnesto !== prevRoot) {
-        const t = r.subtotals.get(x.portainnesto);
+      if (grpKey(x) !== prevRoot) {
+        const t = r.subtotals.get(grpKey(x));
         out.push(['Totale per portainnesto', '', '', '', t.portainnesto, t.mag, t.ord, -t.deficit]);
-        prevRoot = x.portainnesto;
+        prevRoot = grpKey(x);
       }
       out.push([x.clone, x.tipologia, x.produzione, x.varieta, x.portainnesto, x.mag, x.ord, -x.deficit]);
     }

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {
   loadFromSnapshot, reportDisponibilita, reportIndisponibilita, reportPerProduttore,
   reportDaSpedire, reportMessoADisposizione, validateLotto, validateOrdine, clonesOf,
-  summary, store,
+  summary, store, subtotalKey,
   addLotto, updateLotto, deleteLotto, addOrdine, updateOrdine, deleteOrdine,
   addVitiPair, updateVitiPair, deleteVitiPair, addPortainnesto, renamePortainnesto,
   deletePortainnesto, usageOfPair, usageOfRootstock,
@@ -47,27 +47,30 @@ near(r1.totals.disponibilita, sumDisp, 'grand total disponibilità = sum of rows
 near(r1.negativeCount, negRows, 'negativeCount = rows with disponibilità < 0');
 near(r1.rowCount, rows, 'rowCount matches the rendered rows');
 
-/* ordering: rootstock code, then clone */
+/* ordering: rootstock code, then variety, then clone (keeps the groups together) */
 const C = new Intl.Collator('it', { numeric: true, sensitivity: 'base' });
-ok(r1.rows.every((r, i) => i === 0 ||
-   C.compare(r1.rows[i - 1].portainnesto, r.portainnesto) < 0 ||
-   (r1.rows[i - 1].portainnesto === r.portainnesto &&
-    C.compare(r1.rows[i - 1].clone, r.clone) <= 0)),
-   'rows sorted by rootstock code, then clone');
+const ordered = (rows) => rows.every((r, i) => i === 0 ||
+  C.compare(rows[i - 1].portainnesto, r.portainnesto) < 0 ||
+  (rows[i - 1].portainnesto === r.portainnesto &&
+   (C.compare(rows[i - 1].varieta, r.varieta) < 0 ||
+    (rows[i - 1].varieta === r.varieta && C.compare(rows[i - 1].clone, r.clone) <= 0))));
+ok(ordered(r1.rows), 'rows sorted by rootstock, variety, then clone');
 
 /* ---------- report 1: per-rootstock subtotals ---------- */
 {
-  const roots = new Set(r1.rows.map((r) => r.portainnesto));
-  near(r1.subtotals.size, roots.size, 'one subtotal per rootstock');
+  const groups = new Set(r1.rows.map((r) => subtotalKey(r)));
+  near(r1.subtotals.size, groups.size, 'one subtotal per (rootstock, variety) group');
   let sumSubs = 0;
-  for (const [root, t] of r1.subtotals) {
-    const rowsOfRoot = r1.rows.filter((r) => r.portainnesto === root);
-    near(t.count, rowsOfRoot.length, `subtotal count for ${root}`);
-    near(t.mag, rowsOfRoot.reduce((a, b) => a + b.mag, 0), `subtotal magazzino ${root}`);
-    near(t.ord, rowsOfRoot.reduce((a, b) => a + b.ord, 0), `subtotal ordinato ${root}`);
-    near(t.sped, rowsOfRoot.reduce((a, b) => a + b.sped, 0), `subtotal spedito ${root}`);
-    near(t.disponibilita, rowsOfRoot.reduce((a, b) => a + b.disponibilita, 0), `subtotal disponibilità ${root}`);
-    ok(t.portainnesto === root, 'subtotal carries its rootstock code: ' + root);
+  for (const [key, t] of r1.subtotals) {
+    const rowsOfGroup = r1.rows.filter((r) => subtotalKey(r) === key);
+    near(t.count, rowsOfGroup.length, `subtotal count for ${t.portainnesto}`);
+    near(t.mag, rowsOfGroup.reduce((a, b) => a + b.mag, 0), `subtotal magazzino ${t.portainnesto}`);
+    near(t.ord, rowsOfGroup.reduce((a, b) => a + b.ord, 0), `subtotal ordinato ${t.portainnesto}`);
+    near(t.sped, rowsOfGroup.reduce((a, b) => a + b.sped, 0), `subtotal spedito ${t.portainnesto}`);
+    near(t.disponibilita, rowsOfGroup.reduce((a, b) => a + b.disponibilita, 0),
+      `subtotal disponibilità ${t.portainnesto}`);
+    ok(rowsOfGroup.every((r) => r.varieta === t.varieta && r.portainnesto === t.portainnesto),
+       'a subtotal never mixes varieties: ' + t.varieta);
     sumSubs += t.disponibilita;
   }
   near(sumSubs, r1.totals.disponibilita, 'the subtotals add up to the grand total');
@@ -106,28 +109,24 @@ near(r2rows, r1.rows.length, 'report 2 covers the same keys as report 1');
 near(r2.totals.totaleProduttori, r1.totals.disponibilita, 'report 2 grand total = report 1 total');
 near(r2.rowCount, r2rows, 'report 2 rowCount matches the rows');
 {
-  // report 2 carries the same per-rootstock subtotals as report 1, grower columns included
-  const roots = new Set(r2.rows.map((r) => r.portainnesto));
-  near(r2.subtotals.size, roots.size, 'report 2: one subtotal per rootstock');
+  // report 2 carries the same subtotals as report 1 (one per rootstock+variety), grower columns included
+  const groups = new Set(r2.rows.map((r) => subtotalKey(r)));
+  near(r2.subtotals.size, groups.size, 'report 2: one subtotal per (rootstock, variety) group');
   let sumSubs = 0;
-  for (const [root, t] of r2.subtotals) {
-    const rowsOfRoot = r2.rows.filter((r) => r.portainnesto === root);
-    near(t.mag, rowsOfRoot.reduce((a, b) => a + b.mag, 0), `report 2 subtotal magazzino ${root}`);
-    near(t.disponibilita, rowsOfRoot.reduce((a, b) => a + b.disponibilita, 0),
-      `report 2 subtotal disponibilità ${root}`);
+  for (const [key, t] of r2.subtotals) {
+    const rowsOfGroup = r2.rows.filter((r) => subtotalKey(r) === key);
+    near(t.mag, rowsOfGroup.reduce((a, b) => a + b.mag, 0), `report 2 subtotal magazzino ${t.portainnesto}`);
+    near(t.disponibilita, rowsOfGroup.reduce((a, b) => a + b.disponibilita, 0),
+      `report 2 subtotal disponibilità ${t.portainnesto}`);
     for (const g of r2.growers) {
-      near(t.per[g], rowsOfRoot.reduce((a, b) => a + b.per[g], 0),
-        `report 2 subtotal ${g} on ${root}`);
+      near(t.per[g], rowsOfGroup.reduce((a, b) => a + b.per[g], 0),
+        `report 2 subtotal ${g} on ${t.portainnesto} (${t.varieta})`);
     }
     sumSubs += t.disponibilita;
   }
   near(sumSubs, r2.totals.disponibilita, 'report 2: the subtotals add up to the grand total');
 }
-ok(r2.rows.every((r, i) => i === 0 ||
-   C.compare(r2.rows[i - 1].portainnesto, r.portainnesto) < 0 ||
-   (r2.rows[i - 1].portainnesto === r.portainnesto &&
-    C.compare(r2.rows[i - 1].clone, r.clone) <= 0)),
-   'report 2 sorted by rootstock then clone');
+ok(ordered(r2.rows), 'report 2 sorted by rootstock, variety, then clone');
 
 /* grower filter: keeps only the combinations that involve that grower, and must
    not change that grower's own column total */
@@ -146,22 +145,16 @@ const r3 = reportIndisponibilita({});
 ok(r3.count === negRows, 'shortage rows = negative rows of report 1');
 ok(r3.rows.every((r) => r.disponibilita < 0), 'every shortage row is negative');
 ok(r3.rows.every((r) => r.deficit === r.ord - r.mag && r.deficit > 0), 'deficit = ordinato - magazzino');
-ok(r3.rows.every((r, i) => i === 0 ||
-   C.compare(r3.rows[i - 1].portainnesto, r.portainnesto) < 0 ||
-   (r3.rows[i - 1].portainnesto === r.portainnesto &&
-    (C.compare(r3.rows[i - 1].clone, r.clone) < 0 ||
-     (r3.rows[i - 1].clone === r.clone &&
-      C.compare(r3.rows[i - 1].varieta, r.varieta) <= 0)))),
-   'sorted portainnesto → clone (the subtotals need contiguous groups)');
+ok(ordered(r3.rows), 'sorted rootstock → variety → clone (the subtotals need contiguous groups)');
 {
-  const roots = new Set(r3.rows.map((r) => r.portainnesto));
-  near(r3.subtotals.size, roots.size, 'report 3: one subtotal per rootstock');
+  const groups = new Set(r3.rows.map((r) => subtotalKey(r)));
+  near(r3.subtotals.size, groups.size, 'report 3: one subtotal per (rootstock, variety) group');
   let sumMag = 0, sumOrd = 0, sumDef = 0;
-  for (const [root, t] of r3.subtotals) {
-    const rowsOfRoot = r3.rows.filter((r) => r.portainnesto === root);
-    near(t.mag, rowsOfRoot.reduce((a, b) => a + b.mag, 0), `report 3 subtotal magazzino ${root}`);
-    near(t.ord, rowsOfRoot.reduce((a, b) => a + b.ord, 0), `report 3 subtotal ordinato ${root}`);
-    near(t.deficit, rowsOfRoot.reduce((a, b) => a + b.deficit, 0), `report 3 subtotal deficit ${root}`);
+  for (const [key, t] of r3.subtotals) {
+    const rowsOfGroup = r3.rows.filter((r) => subtotalKey(r) === key);
+    near(t.mag, rowsOfGroup.reduce((a, b) => a + b.mag, 0), `report 3 subtotal magazzino ${t.portainnesto}`);
+    near(t.ord, rowsOfGroup.reduce((a, b) => a + b.ord, 0), `report 3 subtotal ordinato ${t.portainnesto}`);
+    near(t.deficit, rowsOfGroup.reduce((a, b) => a + b.deficit, 0), `report 3 subtotal deficit ${t.portainnesto}`);
     ok(t.deficit === t.ord - t.mag, 'report 3 subtotal deficit = ordinato - magazzino');
     sumMag += t.mag; sumOrd += t.ord; sumDef += t.deficit;
   }
@@ -181,12 +174,12 @@ ok(r3.rows.every((r, i) => i === 0 ||
   near(rm.totals.mag, store.lotti.filter((l) => l.produttore === g)
     .reduce((a, l) => a + l.quantita, 0), 'messo: magazzino is that producer’s own stock');
   near(rm.totals.disponibilita, rm.totals.mag - rm.totals.ord, 'messo: grand total disponibilità');
-  const roots = new Set(rm.rows.map((r) => r.portainnesto));
-  near(rm.subtotals.size, roots.size, 'messo: one subtotal per rootstock');
+  const groups = new Set(rm.rows.map((r) => subtotalKey(r)));
+  near(rm.subtotals.size, groups.size, 'messo: one subtotal per (rootstock, variety) group');
   let sumSubs = 0;
-  for (const [root, t] of rm.subtotals) {
-    near(t.mag, rm.rows.filter((r) => r.portainnesto === root).reduce((a, b) => a + b.mag, 0),
-      `messo subtotal magazzino ${root}`);
+  for (const [key, t] of rm.subtotals) {
+    near(t.mag, rm.rows.filter((r) => subtotalKey(r) === key).reduce((a, b) => a + b.mag, 0),
+      `messo subtotal magazzino ${t.portainnesto}`);
     sumSubs += t.mag;
   }
   near(sumSubs, rm.totals.mag, 'messo: the subtotals add up to the grand total');

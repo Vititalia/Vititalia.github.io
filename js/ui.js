@@ -191,7 +191,7 @@ export function combobox(host, { items, placeholder = 'Cerca…', onPick, value 
  * rows: [{type:'group'|'row'|'subtotal'|'total'|'empty', cls?, cells:[{html, label?, cls?, span?}]}]
  * Builds a <table class="grid"> whose CSS turns rows into cards under 760px.
  */
-export function buildTable({ cols, rows, caption, scroll = false, capId, tableClass = '' }) {
+export function buildTable({ cols, rows, caption, scroll = false, capId, tableClass = '', wrapperClass = '' }) {
   const head = `<thead><tr>${cols.map((c) =>
     `<th scope="col" class="${c.align === 'r' ? 'r' : ''} ${c.cls || ''}">${esc(c.label)}</th>`).join('')}</tr></thead>`;
   const body = rows.map((r) => {
@@ -228,7 +228,7 @@ export function buildTable({ cols, rows, caption, scroll = false, capId, tableCl
     : '';
   const described = capHTML ? ` aria-describedby="${id}"` : '';
   const table = `<table class="grid${tableClass ? ' ' + tableClass : ''}"${described}>${head}<tbody>${body}</tbody></table>`;
-  return capHTML + (scroll ? `<div class="table-scroll">${table}</div>` : table);
+  return capHTML + (scroll ? `<div class="table-scroll${wrapperClass ? ' ' + wrapperClass : ''}">${table}</div>` : table);
 }
 
 /** Convenience: a metric cell (mobile shows the label above the value). */

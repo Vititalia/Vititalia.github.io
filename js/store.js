@@ -290,22 +290,32 @@ export function metrics(filters) {
 const zero = () => ({ mag: 0, ord: 0, sped: 0, daSpedire: 0, disponibilita: 0 });
 const METRIC_KEYS = ['mag', 'ord', 'sped', 'daSpedire', 'disponibilita'];
 
-/** Rootstock → clone → variety is the order every availability report uses. */
+/**
+ * Subtotal key: a rootstock subtotal must stay within one tipologia, produzione
+ * and *variety* — summing two varieties on the same rootstock produced numbers
+ * nobody could reconcile with the rows above them (PD-12).
+ */
+export const subtotalKey = (r) =>
+  [r.tipologia || NON_INDICATA, r.produzione || NON_INDICATA, r.varieta, r.portainnesto].join('\u0001');
+
+/** Rootstock → variety → clone: keeps each (rootstock, variety) group together. */
 const byRootstock = (C) => (a, b) =>
   C.compare(a.portainnesto, b.portainnesto) ||
-  C.compare(a.clone, b.clone) ||
-  C.compare(a.varieta, b.varieta);
+  C.compare(a.varieta, b.varieta) ||
+  C.compare(a.clone, b.clone);
 
-/** One subtotal per rootstock, keyed by the rootstock code. */
+/** One subtotal per (tipologia, produzione, varietà, portainnesto). */
 function rootstockSubtotals(rows) {
   const out = new Map();
   for (const r of rows) {
-    if (!out.has(r.portainnesto)) {
-      out.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0, ...zero() });
+    const k = subtotalKey(r);
+    if (!out.has(k)) {
+      out.set(k, { key: k, portainnesto: r.portainnesto, varieta: r.varieta,
+                   tipologia: r.tipologia, produzione: r.produzione, count: 0, ...zero() });
     }
-    const t = out.get(r.portainnesto);
+    const t = out.get(k);
     t.count += 1;
-    for (const k of METRIC_KEYS) t[k] += r[k];
+    for (const key of METRIC_KEYS) t[key] += r[key];
   }
   return out;
 }
@@ -375,13 +385,14 @@ export function reportPerProduttore(filters, growerList) {
   // the same per-rootstock subtotals as Report 1, grower columns included
   const subtotals = new Map();
   for (const r of rows) {
-    if (!subtotals.has(r.portainnesto)) {
+    const k = subtotalKey(r);
+    if (!subtotals.has(k)) {
       const per = {};
       for (const g of growers) per[g] = 0;
-      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
+      subtotals.set(k, { key: k, portainnesto: r.portainnesto, varieta: r.varieta, count: 0,
         ...zero(), per, extra: 0, nonAttr: 0, totaleProduttori: 0 });
     }
-    const t = subtotals.get(r.portainnesto);
+    const t = subtotals.get(k);
     t.count += 1;
     for (const k of METRIC_KEYS) t[k] += r[k];
     t.extra += r.extra; t.nonAttr += r.nonAttr; t.totaleProduttori += r.totaleProduttori;
@@ -514,11 +525,12 @@ export function reportIndisponibilita(filters) {
 
   const subtotals = new Map();
   for (const r of rows) {
-    if (!subtotals.has(r.portainnesto)) {
-      subtotals.set(r.portainnesto, { portainnesto: r.portainnesto, count: 0,
+    const k = subtotalKey(r);
+    if (!subtotals.has(k)) {
+      subtotals.set(k, { key: k, portainnesto: r.portainnesto, varieta: r.varieta, count: 0,
         mag: 0, ord: 0, deficit: 0 });
     }
-    const t = subtotals.get(r.portainnesto);
+    const t = subtotals.get(k);
     t.count += 1; t.mag += r.mag; t.ord += r.ord; t.deficit += r.deficit;
   }
   const deficitTot = rows.reduce((s2, r) => s2 + r.deficit, 0);

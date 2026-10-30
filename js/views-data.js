@@ -111,6 +111,7 @@ export function viewLotti(root, ctx) {
     </div>
 
     <div class="report">${U.buildTable({
+      scroll: true, wrapperClass: 'no-max',
       caption: 'Anagrafica validata: varietà → clone → portainnesto. Quantità intere.',
       cols: [{ label: 'Anno' }, { label: 'Produttore' }, { label: 'Tipologia' }, { label: 'Produzione' },
              { label: 'Varietà' }, { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' },
@@ -260,6 +261,7 @@ export function viewOrdini(root, ctx) {
       nella colonna del produttore nel riepilogo per produttore.</span></div>
 
     <div class="report">${U.buildTable({
+      scroll: true, wrapperClass: 'no-max',
       caption: 'Il flag Spedito è un booleano: alimenta «Di cui spedito» nei riepiloghi. Le note sono quelle inserite con l\'impegno.',
       cols: [{ label: 'Lotto collegato' }, { label: 'Tipologia' }, { label: 'Produzione' }, { label: 'Varietà' },
              { label: 'Clone' }, { label: 'Portainnesto' }, { label: 'Quantità', align: 'r' },

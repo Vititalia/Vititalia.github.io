@@ -3,6 +3,17 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 5. «Totale per portainnesto» never mixes varieties
+
+The subtotal row is now keyed by **tipologia + produzione + varietà +
+portainnesto**, in the availability report, «Mancanze», the per-grower report and
+the producer's «Messo a disposizione». Before, a rootstock shared by several
+varieties showed one subtotal that summed them all, which never reconciled with
+the rows above it. Rows are sorted rootstock → **varietà** → clone so each group
+stays contiguous, and the subtotal line repeats the variety under the label.
+
+Exports carry the same subtotal lines in the same order.
+
 ## 3. «Indisponibilità» is now «Mancanze»
 
 Menu, page title, mobile tab, panorama tile and the Panoramica KPI («In
