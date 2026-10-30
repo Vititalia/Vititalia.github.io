@@ -77,12 +77,19 @@ const actions = (id) => (S.canWrite() ? `<div class="row" style="gap:6px">
 /* --------------------------------------------------------- S-13 lotti */
 export function viewLotti(root, ctx) {
   const q = state.lottiSearch.toLowerCase();
+  const C = S.collator();
   const list = S.store.lotti
     .filter((l) => !state.produttore || l.produttore === state.produttore)
-    .filter((l) => !q || [l.produttore, l.varieta, l.clone, l.portainnesto, l.tipologia]
+    .filter((l) => !q || [l.produttore, l.varieta, l.clone, l.portainnesto, l.tipologia, l.note]
       .some((x) => (x || '').toLowerCase().includes(q)))
     .slice()
-    .reverse();
+    // varietà → clone → portainnesto → produttore (the office reads the list by clone)
+    .sort((a, b) =>
+      C.compare(a.varieta, b.varieta) ||
+      C.compare(a.clone, b.clone) ||
+      C.compare(a.portainnesto, b.portainnesto) ||
+      C.compare(a.produttore || '', b.produttore || '') ||
+      C.compare(String(b.anno), String(a.anno)));
   const shown = list.slice(0, state.lottiLimit);
 
   root.innerHTML = `

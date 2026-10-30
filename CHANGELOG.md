@@ -12,6 +12,12 @@ red when negative). The previous Magazzino / Ordinato / Di cui spedito /
 Disponibilità set answered a different question; these three are the ones the
 producer actually reconciles.
 
+## 8. Lotti magazzino sorted by varietà → clone → portainnesto → produttore
+
+The list no longer opens in reverse insertion order: it is ordered the way the
+office reads it — by variety, then clone, then rootstock, then grower (newest
+year first inside the same pair). The search box also matches the note text.
+
 ## 5. «Totale per portainnesto» never mixes varieties
 
 The subtotal row is now keyed by **tipologia + produzione + varietà +

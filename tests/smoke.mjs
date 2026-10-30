@@ -374,6 +374,20 @@ desktop = true;
   ok(!!document.getElementById('exportBtn'), 'lotti: the Esporta CSV button is there');
   const lotCols = [...document.querySelectorAll('.grid thead th')].map((t) => t.textContent.trim());
   ok(lotCols.includes('Note'), `lotti: the note is a column (${lotCols.join(' · ')})`);
+  /* the list is sorted varietà → clone → portainnesto → produttore */
+  const order = await (async () => {
+    const S2 = await import('../js/store.js');
+    const C = S2.collator();
+    const rows = [...document.querySelectorAll('.grid tbody tr.trow')];
+    const pairs = rows.map((r) => ({
+      varieta: r.querySelector('td[data-label="Varietà"]')?.textContent.trim() || '',
+      clone: r.querySelector('td[data-label="Clone"]')?.textContent.trim() || '',
+    }));
+    return { count: pairs.length, sorted: pairs.every((p, i) => i === 0 ||
+      C.compare(pairs[i - 1].varieta, p.varieta) < 0 ||
+      (pairs[i - 1].varieta === p.varieta && C.compare(pairs[i - 1].clone, p.clone) <= 0)) };
+  })();
+  ok(order.count > 0 && order.sorted, `lotti: sorted by varietà then clone (${order.count} rows)`);
   tap(document.getElementById('exportBtn'));
   await wait(30);
   const lotCsv = captured.length ? await captured[captured.length - 1].text() : '';
