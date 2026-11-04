@@ -3,6 +3,27 @@
 All notable changes to Vignero. Newest first. Each entry names the fix and what
 it changes for the user.
 
+## 23. Bugfix: changing a user's role did nothing
+
+In *Utenti* the **«Ruolo»** sheet had a broken Save: the button called a function
+that only existed inside the sheet's mount callback, so the click threw a
+`ReferenceError` (silently, unless the console was open) and neither the role nor
+the linked producer changed — no toast, no error on screen.
+
+The action now goes through the same hook the other sheets use, and the flow was
+completed while fixing it:
+
+* the submit button disables itself while saving and re-enables on failure;
+* a network/DB error is shown inline instead of being swallowed;
+* the **linked producer** field appears only when the role is *Produttore* and is
+  required in that case;
+* the **last active administrator** cannot be demoted (inline message), matching
+  what the demo registry already refused — in production the check did not exist;
+* the toast names the user and the new role.
+
+A regression test now drives the whole flow (open the sheet, change the role,
+save, read the account back, change it back) and fails on the old code.
+
 ## 22. Mancanze: a grand total at the foot of the sheet
 
 The shortage report closes with a **«Totale generale»** row — Magazzino, Ordinato

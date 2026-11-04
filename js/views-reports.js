@@ -1192,6 +1192,10 @@ export function viewUtenti(root, ctx) {
     });
   });
 
+  /* Role change: the «Salva» action used to call a function that only existed
+   * inside onMount, so the click threw a ReferenceError and nothing happened.
+   * The hook below (same pattern as the other sheets) is what the button calls. */
+  let roleSaveFn = null;
   root.querySelectorAll('[data-role-for]').forEach((b) => {
     b.addEventListener('click', () => {
       const u = A.listUsers().find((x) => x.id === b.dataset.roleFor);
@@ -1201,27 +1205,64 @@ export function viewUtenti(root, ctx) {
             <label class="field"><span>Ruolo</span><select name="role">
               ${P.ROLES.map((r) => `<option value="${r.key}"${u.role === r.key ? ' selected' : ''}>${U.esc(r.label)}</option>`).join('')}
             </select></label>
-            <label class="field"><span>Produttore collegato</span><select name="grower">
+            <label class="field" id="growerField"><span>Produttore collegato</span><select name="grower">
               <option value="">—</option>
               ${S.store.meta.produttori.map((g) => `<option value="${U.esc(g)}"${u.grower === g ? ' selected' : ''}>${U.esc(g)}</option>`).join('')}
             </select></label>
+            <p class="hint" id="roleHint"></p>
             <p class="field-error" id="roleErr" hidden></p>
           </form>`,
         actions: [
           { label: 'Annulla', class: 'btn-secondary', run: U.closeSheet },
-          { label: 'Salva', class: 'btn-primary', run: () => save() },
+          { label: 'Salva', class: 'btn-primary', run: () => { if (roleSaveFn) roleSaveFn(); } },
         ],
         onMount: (sheet) => {
           const form = sheet.querySelector('#roleForm');
+          const growerField = sheet.querySelector('#growerField');
+          const err = sheet.querySelector('#roleErr');
+          const hint = sheet.querySelector('#roleHint');
+          const syncGrower = () => {
+            const isProducer = form.elements.role.value === 'produttore';
+            growerField.hidden = !isProducer;
+            hint.textContent = isProducer
+              ? 'Scegli il produttore che questo account rappresenta.'
+              : '';
+          };
+          form.elements.role.addEventListener('change', syncGrower);
+          syncGrower();
+
           async function save() {
-            const res = await A.setRole(u.id, form.elements.role.value);
-            const err = sheet.querySelector('#roleErr');
-            if (!res.ok) { err.hidden = false; err.textContent = res.error; return; }
-            if (form.elements.role.value === 'produttore') await A.setGrower(u.id, form.elements.grower.value);
+            const role = form.elements.role.value;
+            const grower = form.elements.grower.value;
+            const admins = A.listUsers().filter((x) => x.role === 'admin' && x.status !== 'sospeso');
+            if (u.role === 'admin' && role !== 'admin' && admins.length <= 1) {
+              err.hidden = false;
+              err.textContent = 'Deve restare almeno un amministratore attivo.';
+              return;
+            }
+            if (role === 'produttore' && !grower) {
+              err.hidden = false;
+              err.textContent = 'Scegli il produttore collegato.';
+              return;
+            }
+            const btn = sheet.querySelector('.sheet-actions [data-act="1"]');
+            if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+            let res;
+            try { res = await A.setRole(u.id, role); }
+            catch (e) { res = { ok: false, error: 'Errore di rete: ' + (e.message || e) }; }
+            if (!res.ok) {
+              if (btn) { btn.disabled = false; btn.textContent = 'Salva'; }
+              err.hidden = false; err.textContent = res.error;
+              return;
+            }
+            if (role === 'produttore') await A.setGrower(u.id, grower);
+            if (btn) { btn.disabled = false; btn.textContent = 'Salva'; }
             U.closeSheet();
-            U.toast('Ruolo aggiornato');
+            U.toast(`Ruolo di ${u.name}: ${P.roleLabel(role)}`);
             ctx.refresh();
           }
+          roleSaveFn = save;
+          form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
         },
       });
     });

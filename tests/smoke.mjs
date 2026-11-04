@@ -840,6 +840,59 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(!auth.listUsers().some((u) => u.email === 'test.vendite@vignero.it'), 'registry reset clears the invite');
 }
 
+/* ---------------- utenti: changing the role really saves (regression) ---------------- */
+{
+  await loginAs('admin');
+  await go('#/config/utenti');
+  const S9 = await import('../js/store.js');
+  const target = auth.listUsers().find((u) => u.email === 'vendite@vignero.it');
+  ok(!!target, 'the account to edit exists');
+  const roleBtn = [...document.querySelectorAll('[data-role-for]')].find((b) => b.dataset.roleFor === target.id);
+  ok(!!roleBtn, 'every row has a «Ruolo» action');
+  click(roleBtn);
+  await wait(40);
+  const form = document.querySelector('#roleForm');
+  ok(!!form, 'the role sheet opens');
+  ok(form.elements.role.value === 'vendite', `it opens on the current role (${form.elements.role.value})`);
+  ok(document.querySelector('#growerField').hidden, 'the producer field is hidden for a non-producer role');
+
+  form.elements.role.value = 'produttore';
+  form.elements.role.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await wait(20);
+  ok(!document.querySelector('#growerField').hidden, 'choosing «Produttore» reveals the linked producer');
+
+  /* without a producer the save is refused, with the message on screen */
+  click(document.querySelector('.sheet-actions [data-act="1"]'));
+  await wait(80);
+  ok(/produttore collegato/i.test(document.querySelector('#roleErr').textContent || ''),
+     'saving a producer without a grower is refused');
+  ok(auth.listUsers().find((u) => u.id === target.id).role === 'vendite', 'and nothing changed');
+
+  /* with a producer the save goes through */
+  form.elements.grower.value = S9.store.meta.produttori[0];
+  click(document.querySelector('.sheet-actions [data-act="1"]'));
+  await wait(120);
+  const after = auth.listUsers().find((u) => u.id === target.id);
+  ok(after.role === 'produttore', `the role is really saved (${after.role})`);
+  ok(after.grower === S9.store.meta.produttori[0], `the linked producer is saved too (${after.grower})`);
+  ok(!document.querySelector('#roleForm'), 'the sheet closes after saving');
+  ok(!!(await auth.authenticate('vendite@vignero.it', 'Vendite#2026')).ok,
+     'the account still signs in (its password is untouched)');
+
+  /* an administrator can change a role back, and the last admin is protected */
+  await go('#/config/utenti');
+  const back = [...document.querySelectorAll('[data-role-for]')].find((b) => b.dataset.roleFor === target.id);
+  click(back);
+  await wait(40);
+  const form2 = document.querySelector('#roleForm');
+  form2.elements.role.value = 'vendite';
+  click(document.querySelector('.sheet-actions [data-act="1"]'));
+  await wait(120);
+  ok(auth.listUsers().find((u) => u.id === target.id).role === 'vendite', 'the role can be changed back');
+
+  await auth.resetRegistry();
+}
+
 /* ---------------- passwords: the user changes their own, staff sets one ---------------- */
 {
   const tapEl = (node) => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
