@@ -338,6 +338,7 @@ export async function setGrower(id, grower) {
   const c = await sb();
   const { error } = await c.from('profiles').update({ grower: grower || null }).eq('user_id', id);
   if (error) return { ok: false, error: italian(error.message) };
+  await refreshUsers();      // otherwise the grid keeps the old «Produttore» cell
   return { ok: true };
 }
 

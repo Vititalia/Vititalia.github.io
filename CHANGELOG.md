@@ -19,7 +19,10 @@ completed while fixing it:
   required in that case;
 * the **last active administrator** cannot be demoted (inline message), matching
   what the demo registry already refused — in production the check did not exist;
-* the toast names the user and the new role.
+* the toast names the user and the new role;
+* the user cache is refreshed after **any** profile write: setting the linked
+  producer did not refresh it, so the grid kept showing «—» in the Produttore
+  column even though the database had the value.
 
 A regression test now drives the whole flow (open the sheet, change the role,
 save, read the account back, change it back) and fails on the old code.

@@ -876,6 +876,15 @@ ok(storeMod.store.portainnesti.length === rootsBefore + 1, 'duplicate not stored
   ok(after.role === 'produttore', `the role is really saved (${after.role})`);
   ok(after.grower === S9.store.meta.produttori[0], `the linked producer is saved too (${after.grower})`);
   ok(!document.querySelector('#roleForm'), 'the sheet closes after saving');
+  /* the grid shows the new role *and* the linked producer (stale cache regression) */
+  await go('#/config/utenti');
+  const rowTxt = await (async () => {
+    const row = [...document.querySelectorAll('.grid tbody tr.trow')]
+      .find((tr) => tr.textContent.includes('vendite@vignero.it'));
+    return row ? row.textContent.replace(/\s+/g, ' ') : '';
+  })();
+  ok(/Produttore/.test(rowTxt) && rowTxt.includes(S9.store.meta.produttori[0]),
+     `the grid shows the new role and producer (${rowTxt.slice(0, 90)})`);
   ok(!!(await auth.authenticate('vendite@vignero.it', 'Vendite#2026')).ok,
      'the account still signs in (its password is untouched)');
 
